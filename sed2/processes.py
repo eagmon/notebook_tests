@@ -56,8 +56,19 @@ def model_reset(model_instance):
         'element_id': 'str',
         'value': 'float'}})
 @annotate('sed:set_model')
-def set_model(model_instance: Model, element_id, value):
+def model_set_value(model_instance: Model, element_id, value):
     model_instance.set(element_id, value)
+
+
+@ports({
+    'inputs': {
+        'model_instance': 'Model',
+        'element_id': 'str'},
+    'outputs': {
+        'value': 'float'}})
+@annotate('sed:get_model')
+def model_get_value(model_instance, element_id):
+    return model_instance.get_value(element_id)
 
 
 @ports({
@@ -125,8 +136,8 @@ class curve:
         'selection_list': 'list'},
     'outputs': {
         'results': 'dict'}})
-@annotate('sed:steady_state')
-def steady_state(model, selection_list):
+@annotate('sed:steady_state_values')
+def steady_state_values(model, selection_list):
     sbml_model = te.loadSBMLModel(model.sbml_file)
     steady_state_values = sbml_model.getSteadyStateValues()
     ids = sbml_model.getFloatingSpeciesIds() + sbml_model.getGlobalParameterIds()
@@ -136,6 +147,18 @@ def steady_state(model, selection_list):
             result_dict[id] = steady_state_values[i]
     return result_dict
 
+
+@ports({
+    'inputs': {
+        'model': 'Model',
+        'tolerance': 'float'},
+    'outputs': {
+        'sum': 'float'}})
+@annotate('sed:is_steady_state')
+def is_steady_state(model, tolerance):
+    sbml_model = te.loadSBMLModel(model.sbml_file)
+    ss = sbml_model.steadyState()
+    return ss < tolerance
 
 def report_dict(result):
     for key, value in result.items():
@@ -228,11 +251,13 @@ functions = [
     sbml_model_from_path,
     uniform_time_course,
     model_reset,
-    set_model,
+    model_set_value,
+    model_get_value,
     data_description,
     sum_of_squares,
     plot2d,
-    steady_state,
+    steady_state_values,
+    is_steady_state,
     report,
     n_dimensional_scan,
     repeated_simulation,
