@@ -160,6 +160,20 @@ def is_steady_state(model, tolerance):
     ss = sbml_model.steadyState()
     return ss < tolerance
 
+
+@ports({
+    'inputs': {
+        'model': 'Model',
+        'variable': 'string',
+        'parameter': 'string'},
+    'outputs': {
+        'coefficient': 'float'}})
+@annotate('sed:is_steady_state')
+def concentration_control_coefficient(model, variable, parameter):
+    sbml_model = te.loadSBMLModel(model.sbml_file)
+    return sbml_model.getCC(variable, parameter)
+
+
 def report_dict(result):
     for key, value in result.items():
         print(f'{key}: {value}')
@@ -261,6 +275,7 @@ functions = [
     report,
     n_dimensional_scan,
     repeated_simulation,
+    concentration_control_coefficient,
 ]
 
 sed_process_registry = register(functions)
