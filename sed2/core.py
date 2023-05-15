@@ -3,30 +3,7 @@ from typing import Callable, Any, List, Dict, Union, Optional, Tuple, Dict
 import numpy as np
 import json
 import textwrap
-
-
-# decorators for annotation and ports
-def annotate(annotation):
-    def decorator(func):
-        func.annotation = annotation
-        return func
-
-    return decorator
-
-
-def ports(ports_schema):
-    # assert inputs/outputs and types, give suggestions
-    allowable = ['inputs', 'outputs']
-    assert all(key in allowable for key in
-               ports_schema.keys()), f'{[key for key in ports_schema.keys() if key not in allowable]} not allowed as top-level port keys. Allowable keys include {str(allowable)}'
-
-    # TODO assert type are in type_registry
-    # TODO check that keys match function signature
-    def decorator(func):
-        func.ports = ports_schema
-        return func
-
-    return decorator
+from sed2 import ports
 
 
 # registration
@@ -66,7 +43,7 @@ class ProcessRegistry:
             self.activate_process(process_name, namespace)
 
 
-def register(functions, process_registry=None):
+def register_functions(functions, process_registry=None):
     if not process_registry:
         process_registry = ProcessRegistry()
     for func in functions:
