@@ -11,7 +11,11 @@ class ProcessRegistry:
     def __init__(self):
         self.registry = {}
 
-    def register(self, func):
+    def register(self, process):
+        if hasattr(process, '__call__'):
+            self.register_function(process)
+
+    def register_function(self, func):
         name = func.__name__
         signature = inspect.signature(func)
         annotation = getattr(func, 'annotation', None)
@@ -26,7 +30,7 @@ class ProcessRegistry:
         item = {
             'annotation': annotation,
             'ports': ports,
-            'process': func}
+            'address': func}
         self.registry[name] = item
 
     def access(self, name):
@@ -36,7 +40,7 @@ class ProcessRegistry:
         return [v.get('annotation') for k, v in self.registry.items()]
 
     def activate_process(self, process_name, namespace):
-        namespace[process_name] = self.registry[process_name]['process']
+        namespace[process_name] = self.registry[process_name]['address']
 
     def activate_all(self, namespace):
         for process_name in self.registry.keys():

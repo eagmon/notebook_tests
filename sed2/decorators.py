@@ -5,7 +5,7 @@ Decorators for Processes
 
 def register(registry):
     def decorator(func):
-        registry.register_functions(func)
+        registry.register_function(func)
         return func
     return decorator
 
