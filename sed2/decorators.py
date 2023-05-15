@@ -3,9 +3,9 @@ Decorators for Processes
 """
 
 
-def register(registry):
+def register(registry, identifier=None):
     def decorator(func):
-        registry.register_function(func)
+        registry.register_function(func, identifier=identifier)
         return func
     return decorator
 
@@ -22,7 +22,6 @@ def ports(ports_schema):
     allowable = ['inputs', 'outputs']
     assert all(key in allowable for key in
                ports_schema.keys()), f'{[key for key in ports_schema.keys() if key not in allowable]} not allowed as top-level port keys. Allowable keys include {str(allowable)}'
-
     # TODO assert type are in type_registry
     # TODO check that keys match function signature
     def decorator(func):

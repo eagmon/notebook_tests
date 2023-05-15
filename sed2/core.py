@@ -15,23 +15,24 @@ class ProcessRegistry:
         if hasattr(process, '__call__'):
             self.register_function(process)
 
-    def register_function(self, func):
-        name = func.__name__
+    def register_function(self, func, identifier=None):
+        if not identifier:
+            identifier = func.__name__
         signature = inspect.signature(func)
         annotation = getattr(func, 'annotation', None)
         ports = getattr(func, 'ports')
 
         # TODO -- assert ports and signature match
         if not annotation:
-            raise Exception(f'Process {name} requires annotations')
+            raise Exception(f'Process {identifier} requires annotations')
         if not ports:
-            raise Exception(f'Process {name} requires annotations')
+            raise Exception(f'Process {identifier} requires annotations')
 
         item = {
             'annotation': annotation,
             'ports': ports,
             'address': func}
-        self.registry[name] = item
+        self.registry[identifier] = item
 
     def access(self, name):
         return self.registry.get(name)
@@ -43,6 +44,7 @@ class ProcessRegistry:
         namespace[process_name] = self.registry[process_name]['address']
 
     def activate_all(self, namespace):
+        """how to add to globals: process_registry.activate_all(globals())"""
         for process_name in self.registry.keys():
             self.activate_process(process_name, namespace)
 
