@@ -3,6 +3,9 @@ import copy
 import json
 import types
 import abc
+from functools import reduce
+import operator
+
 import numpy as np
 from bigraph_viz import plot_bigraph, pf, pp
 from bigraph_viz.dict_utils import schema_keys
@@ -38,9 +41,11 @@ def ports(ports_schema):
     allowed = ['inputs', 'outputs']
     assert all(key in allowed for key in
                ports_schema.keys()), f'{[key for key in ports_schema.keys() if key not in allowed]} not allowed as top-level port keys. Allowed keys include {str(allowed)}'
-
+    ports = ports_schema.get('inputs', {})
+    ports.update(ports_schema.get('outputs', {}))
     def decorator(func):
-        func.ports = ports_schema
+        func.input_output_ports = ports_schema
+        func.ports = ports
         return func
 
     return decorator
@@ -66,13 +71,13 @@ class ProcessRegistry:
             bases = [base.__name__ for base in process.__bases__]
         except:
             bases = None
-        process_type = None
+        process_class = None
         if isinstance(process, types.FunctionType):
-            process_type = 'function'
+            process_class = 'function'
         elif 'Composite' in bases:
-            process_type = 'composite'
+            process_class = 'composite'
         elif 'Process' in bases:
-            process_type = 'process'
+            process_class = 'process'
 
         # TODO -- assert ports and signature match
         if not annotation:
@@ -84,7 +89,7 @@ class ProcessRegistry:
             'annotation': annotation,
             'ports': ports,
             'address': process,
-            'type': process_type,
+            'class': process_class,
         }
         self.registry[identifier] = item
 
@@ -132,27 +137,17 @@ def deserialize_instance(serialized_wiring):
     return json.loads(serialized_wiring, object_hook=convert_numpy)
 
 
+def get_value_from_path(dictionary, path):
+    # noinspection PyBroadException
+    try:
+        return reduce(operator.getitem, path, dictionary)
+    except Exception:
+        return None
+
+
 def extract_composite_config(schema):
     config = {k: v for k, v in schema.items() if k not in schema_keys}
     return config
-
-
-def initialize_process_from_schema(schema, process_registry):
-    schema = deserialize_instance(schema)
-    assert len(schema) == 1  # only one top-level key
-    process_name = next(iter(schema))
-    process_id = schema[process_name].get('_id', process_name)
-    process_entry = process_registry.access(process_id)
-    process = process_entry['address']  # get the process from registry
-
-    if process_entry['type'] == 'function':
-        return {process_name: process}
-    elif process_entry['type'] == 'process':
-        config = extract_composite_config(schema[process_name])
-        return {process_name: process(config=config, process_registry=process_registry)}
-    elif process_entry['type'] == 'composite':
-        config = extract_composite_config(schema[process_name])
-        return {process_name: process(config=config, process_registry=process_registry)}
 
 
 def get_processes_states_from_schema(schema, process_registry, path=None):
@@ -173,8 +168,17 @@ def get_processes_states_from_schema(schema, process_registry, path=None):
                 process = process_registry.access(process_id)
                 process_ports = process['ports']
                 assert process_type in all_annotations, f'{name} needs a type annotation from: {all_annotations}'
-                assert process_wires.keys() == process_ports.keys(), f'{name} wires {process_wires} need to match ports {process_ports}'
-                processes[next_path] = process['address']
+                assert process_wires.keys() == process_ports.keys(), f'{name} wires {list(process_wires.keys())} ' \
+                                                                     f'need to match ports {list(process_ports.keys())}'
+                # initialize the process
+                process_class = process['class']
+                process_address = process['address']
+                if process_class == 'function':
+                    processes[next_path] = process_address
+                elif process_class == 'process':
+                    processes[next_path] = process_address(value)
+                elif process_class == 'composite':
+                    processes[next_path] = process_address(value, process_registry)  # TODO -- get process config, not full value
 
             p, s = get_processes_states_from_schema(value, process_registry, path=next_path)
             processes.update(p)
@@ -194,9 +198,6 @@ class Process:
     config = {}
 
     def __init__(self, config):
-        self.initialize(config)
-
-    def initialize(self, config):
         self.config = config
 
     @abc.abstractmethod
@@ -216,18 +217,10 @@ class Composite(Process):
     def __init__(self, config, process_registry):
         self.config = config
         self.process_registry = process_registry
-        self.initialize()
-
-    def initialize(self):
         processes, states = get_processes_states_from_schema(
             self.config, self.process_registry)
         self.states = states
-        self.processes = {}
-
-        for process in processes:
-            process_schema = {process: self.config[process]}
-            initialized_process = initialize_process_from_schema(process_schema, self.process_registry)
-            self.processes.update(initialized_process)
+        self.processes = processes
 
     def process_state(self, process_path):
         return
@@ -296,6 +289,7 @@ def run_instance1():
             '_type': 'sed:range_iterator',
             'wires': {
                 'trials': 'trials',
+                'results': 'results',
             },
             # 'config': {},
             'value': 0,
