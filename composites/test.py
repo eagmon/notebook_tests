@@ -1,13 +1,13 @@
 import inspect
+import copy
 import json
 import types
 import abc
 import numpy as np
-from bigraph_viz import plot_bigraph, plot_flow, pf
+from bigraph_viz import plot_bigraph, pf, pp
 from bigraph_viz.dict_utils import schema_keys
 
 schema_keys.extend(['_id', 'config'])
-
 
 """
 Decorators
@@ -49,6 +49,8 @@ def ports(ports_schema):
 """
 Registry
 """
+
+
 class ProcessRegistry:
     def __init__(self):
         self.registry = {}
@@ -104,10 +106,10 @@ class ProcessRegistry:
 # initialize a registry
 sed_process_registry = ProcessRegistry()
 
-
 """
 More helper functions
 """
+
 
 def serialize_instance(wiring):
     def convert_numpy(obj):
@@ -142,22 +144,44 @@ def initialize_process_from_schema(schema, process_registry):
     process_id = schema[process_name].get('_id', process_name)
     process_entry = process_registry.access(process_id)
     process = process_entry['address']  # get the process from registry
+
     if process_entry['type'] == 'function':
         return {process_name: process}
-    elif process_entry['type'] == 'process' or process_entry['type'] == 'composite':
+    elif process_entry['type'] == 'process':
+        config = extract_composite_config(schema[process_name])
+        return {process_name: process(config=config, process_registry=process_registry)}
+    elif process_entry['type'] == 'composite':
         config = extract_composite_config(schema[process_name])
         return {process_name: process(config=config, process_registry=process_registry)}
 
 
-def get_processes_states_from_schema(schema, process_registry):
+def get_processes_states_from_schema(schema, process_registry, path=None):
+    schema = copy.deepcopy(schema)
+    path = path or ()
     all_annotations = process_registry.get_annotations()
+
     processes = {}
     states = {}
     for name, value in schema.items():
-        if isinstance(value, dict) and value.get('wires'):
-            processes[name] = value
-        else:
-            states[name] = value
+        next_path = path + (name,)
+        if isinstance(value, dict):
+            if value.get('wires'):
+                # get the process
+                process_id = value.pop('_id')
+                process_type = value.pop('_type')
+                process_wires = value.pop('wires')
+                process = process_registry.access(process_id)
+                process_ports = process['ports']
+                assert process_type in all_annotations, f'{name} needs a type annotation from: {all_annotations}'
+                assert process_wires.keys() == process_ports.keys(), f'{name} wires {process_wires} need to match ports {process_ports}'
+                processes[next_path] = process['address']
+
+            p, s = get_processes_states_from_schema(value, process_registry, path=next_path)
+            processes.update(p)
+            states.update(s)
+        elif name not in schema_keys:
+            states[next_path] = value
+
     return processes, states
 
 
@@ -186,13 +210,15 @@ class Process:
 
 class Composite(Process):
     config = {}
+    processes = None
+    states = None
 
     def __init__(self, config, process_registry):
-        self.initialize(config, process_registry)
-
-    def initialize(self, config, process_registry):
         self.config = config
         self.process_registry = process_registry
+        self.initialize()
+
+    def initialize(self):
         processes, states = get_processes_states_from_schema(
             self.config, self.process_registry)
         self.states = states
@@ -200,7 +226,7 @@ class Composite(Process):
 
         for process in processes:
             process_schema = {process: self.config[process]}
-            initialized_process = initialize_process_from_schema(process_schema, process_registry)
+            initialized_process = initialize_process_from_schema(process_schema, self.process_registry)
             self.processes.update(initialized_process)
 
     def process_state(self, process_path):
@@ -212,7 +238,6 @@ class Composite(Process):
     @abc.abstractmethod
     def run(self):
         return {}
-
 
 
 """
@@ -263,7 +288,7 @@ def add_two(a, b):
     return a + b
 
 
-def test_instance():
+def run_instance1():
     config1 = {
         'trials': 10,
         'loop': {
@@ -294,10 +319,10 @@ def test_instance():
 
     sim_experiment.run()
 
-    json_str = sim_experiment.to_json()
+    print(pf(sim_experiment.config))
 
     plot_bigraph(config1, out_dir='out', filename='test1')
 
 
 if __name__ == '__main__':
-    test_instance()
+    run_instance1()
