@@ -3,8 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import tellurium as te
 import pandas as pd
-from sed2.core import register_functions
-from sed2 import ports, annotate, register
+from sed1.core import register_functions
+from sed1 import ports, annotate, register
 
 
 class Model:

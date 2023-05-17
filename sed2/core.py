@@ -1,26 +1,86 @@
 import inspect
-from typing import Callable, Any, List, Dict, Union, Optional, Tuple, Dict
-import numpy as np
+import copy
 import json
-import textwrap
-from sed2 import ports
+import types
+import abc
+from abc import ABC
+from functools import reduce
+import operator
+
+import numpy as np
+from bigraph_viz import plot_bigraph, pf, pp
+from bigraph_viz.dict_utils import schema_keys
+
+schema_keys.extend(['_id', 'config'])
+
+"""
+Decorators
+"""
 
 
-# registration
+def register(registry, identifier=None):
+    def decorator(func):
+        registry.register(func, identifier=identifier)
+        return func
+
+    return decorator
+
+
+def annotate(annotation):
+    def decorator(func):
+        func.annotation = annotation
+        return func
+
+    return decorator
+
+
+# TODO: ports for functions require input/output, but for processes this isn't required
+# TODO assert type are in type_registry
+# TODO check that keys match function signature
+def ports(ports_schema):
+    # assert inputs/outputs and types, give suggestions
+    allowed = ['inputs', 'outputs']
+    assert all(key in allowed for key in
+               ports_schema.keys()), f'{[key for key in ports_schema.keys() if key not in allowed]} not allowed as top-level port keys. Allowed keys include {str(allowed)}'
+    ports = copy.deepcopy(ports_schema.get('inputs', {}))
+    ports.update(ports_schema.get('outputs', {}))
+    def decorator(func):
+        func.input_output_ports = ports_schema
+        func.ports = ports
+        return func
+
+    return decorator
+
+
+"""
+Registry
+"""
+
+
 class ProcessRegistry:
     def __init__(self):
         self.registry = {}
 
-    def register(self, process):
-        if hasattr(process, '__call__'):
-            self.register_function(process)
-
-    def register_function(self, func, identifier=None):
+    def register(self, process, identifier=None):
         if not identifier:
-            identifier = func.__name__
-        signature = inspect.signature(func)
-        annotation = getattr(func, 'annotation', None)
-        ports = getattr(func, 'ports')
+            identifier = process.__name__
+        signature = inspect.signature(process)
+        annotation = getattr(process, 'annotation', None)
+        ports = getattr(process, 'ports')
+
+        try:
+            bases = [base.__name__ for base in process.__bases__]
+        except:
+            bases = None
+
+        process_class = None
+        if isinstance(process, types.FunctionType):
+            process_class = 'function'
+        elif 'Composite' in bases:
+            process_class = 'composite'
+        elif 'Process' in bases:
+            process_class = 'process'
+        process.process_class = process_class  # add process class annotation
 
         # TODO -- assert ports and signature match
         if not annotation:
@@ -31,7 +91,9 @@ class ProcessRegistry:
         item = {
             'annotation': annotation,
             'ports': ports,
-            'address': func}
+            'address': process,
+            'class': process_class,
+        }
         self.registry[identifier] = item
 
     def access(self, name):
@@ -49,12 +111,12 @@ class ProcessRegistry:
             self.activate_process(process_name, namespace)
 
 
-def register_functions(functions, process_registry=None):
-    if not process_registry:
-        process_registry = ProcessRegistry()
-    for func in functions:
-        process_registry.register(func)
-    return process_registry
+# initialize a registry
+sed_process_registry = ProcessRegistry()
+
+"""
+More helper functions
+"""
 
 
 def serialize_instance(wiring):
@@ -78,135 +140,209 @@ def deserialize_instance(serialized_wiring):
     return json.loads(serialized_wiring, object_hook=convert_numpy)
 
 
-def topological_sort(graph):
-    """Return list of sorted process names based on dependencies"""
-    visited = set()
-    sorted_list = []
-
-    def visit(node):
-        if node not in visited:
-            visited.add(node)
-            if node in graph:
-                if '_depends_on' in graph[node]:
-                    for neighbor in graph[node]['_depends_on']:
-                        visit(neighbor)
-            sorted_list.append(node)
-
-    for node in graph:
-        visit(node)
-    return sorted_list
+def get_value_from_path(dictionary, path):
+    # noinspection PyBroadException
+    try:
+        return reduce(operator.getitem, path, dictionary)
+    except Exception:
+        return None
 
 
-def get_processes_and_states_from_schema(schema, process_registry):
+def extract_composite_config(schema):
+    config = {k: v for k, v in schema.items() if k not in schema_keys}
+    return config
+
+
+def get_processes_states_from_schema(schema, process_registry, path=None):
+    schema = copy.deepcopy(schema)
+    path = path or ()
     all_annotations = process_registry.get_annotations()
 
-    # separate the processes and states
     processes = {}
     states = {}
     for name, value in schema.items():
-        if isinstance(value, dict) and value.get('wires'):
-            annotation = value.get('_type')
-            if annotation not in all_annotations:
-                raise Exception(
-                    f'{name} has a type annotation {annotation} not included in the process registry')
-            processes[name] = value
-        else:
+        next_path = path + (name,)
+        if isinstance(value, dict):
+            if value.get('wires'):
+                # get the process
+                process_id = value.pop('_id')
+                process_type = value.pop('_type')
+                process_wires = value.pop('wires')
+                process = process_registry.access(process_id)
+                process_ports = process['ports']
+                assert process_type in all_annotations, f'{name} needs a type annotation from: {all_annotations}'
+                assert process_wires.keys() == process_ports.keys(), f'{name} wires {list(process_wires.keys())} ' \
+                                                                     f'need to match ports {list(process_ports.keys())}'
+                # initialize the process
+                process_class = process['class']
+                process_address = process['address']
+                if process_class == 'function':
+                    processes[next_path] = process_address
+                elif process_class == 'process':
+                    processes[next_path] = process_address(value)
+                elif process_class == 'composite':
+                    processes[next_path] = process_address(value, process_registry)  # TODO -- get process config, not full value
+                    value = {}
+
+            p, s = get_processes_states_from_schema(value, process_registry, path=next_path)
+            processes.update(p)
+            states.update(s)
+        elif name not in schema_keys:
             states[name] = value
+
     return processes, states
 
 
-def generate_script(
-        schema: Union[str, dict],
-        process_registry: ProcessRegistry
-) -> str:
-    """Generate an executable Python script from the declarative JSON format"""
+"""
+Process and Composite base class
+"""
 
-    schema = deserialize_instance(schema)
-    script = []
 
-    # separate the processes and states
-    processes, states = get_processes_and_states_from_schema(schema, process_registry)
-    sorted_processes = topological_sort(processes)
+class Process:
+    config = {}
 
-    # add states to the top of the script
-    for name, value in states.items():
-        script.insert(0, f'{name} = {value}')
+    def __init__(self, config):
+        self.config = config
 
-    # add processes to the bottom of the script in their sorted order
-    for name in sorted_processes:
-        value = processes[name]
-        process_entry = process_registry.access(name)
-        if process_entry:
-            ports = process_entry['ports']
-            wires = value['wires']
-            func_script = None
-            inputs = ports.get('inputs')
-            outputs = ports.get('outputs')
-            if inputs:
-                input_values = [(key, wires[key]) for key in inputs.keys()]
-                input_args = ', '.join(f'{arg}={val}' for (arg, val) in input_values)
-                func_script = f'{name}({input_args})'
+    @abc.abstractmethod
+    def ports(self):
+        return {}
+
+    @abc.abstractmethod
+    def update(self, state):
+        return {}
+
+
+class Composite(Process, ABC):
+    config = {}
+    processes = None
+    states = None
+
+    def __init__(self, config, process_registry):
+        self.config = config
+        self.process_registry = process_registry
+        processes, states = get_processes_states_from_schema(
+            self.config, self.process_registry)
+        self.states = states
+        self.processes = processes
+
+    def process_state(self, process_path):
+        # TODO -- get the states for this specific process
+        process_value = get_value_from_path(self.config, process_path)
+        wires = process_value['wires']
+        states = {wire_id: self.states[target] for wire_id, target in wires.items()}
+        return states
+
+    def to_json(self):
+        return serialize_instance(self.config)
+
+    def update(self, state):
+        updates = []
+        for process_path, process in self.processes.items():
+            process_states = self.process_state(process_path)
+            if process.process_class == 'function':
+                result = process(**process_states)
             else:
-                func_script = f'{name}()'
-            if outputs:
-                output_values = [(key, wires[key]) for key in outputs.keys()]
-                output_args = ', '.join(f'{val}' for (arg, val) in output_values)
-                func_script = f'{output_args} = ' + func_script
-            script.append(func_script)
-        else:
-            raise Exception(f'Function {name} not found in the process registry.')
-    return '\n'.join(script)
+                result = process.update(state=process_states)
+            updates.append(result)
+
+        return updates
 
 
-def generate_composite_process(json_str, process_registry):
-    deserialized_wiring = deserialize_instance(json_str)
-    ports = deserialized_wiring.pop('_ports')
-    input_ports = ports.get('inputs')
-    output_ports = ports.get('outputs')
-    input_port_values = {}
-    for port_name in input_ports.keys():
-        input_port_values[port_name] = deserialized_wiring.pop(port_name, None)
-    script = generate_script(deserialized_wiring, process_registry)
-
-    # activate all processes
-    process_registry.activate_all(globals())
-
-    # make the composite process as a string
-    func_str = ''
-    return_str = ''
-    if ports:
-        func_str += f'@ports({ports})\n'
-    if input_ports:
-        input_args_str = ', '.join(
-            [f'{port_name}: {value} = {input_port_values[port_name]}' for port_name, value in input_ports.items()])
-        func_str += f'def composite_process({input_args_str})'
-    else:
-        func_str += f'def composite_process()'
-    if output_ports:
-        output_args_str = ', '.join([f'{value}' for key, value in output_ports.items()])
-        func_str += f' -> {output_args_str}:\n'
-        return_str = ', '.join([f'{key}' for key, value in output_ports.items()])
-        return_str = '\nreturn ' + return_str
-    else:
-        func_str += f':\n'
-
-    indent = '    '
-    indented_script = textwrap.indent(script, indent)
-    indented_return_str = textwrap.indent(return_str, indent)
-    func_str += indented_script
-    func_str += indented_return_str
-
-    print(func_str)
-    exec(func_str, globals())
-    composite_process = globals()['composite_process']
-    return composite_process
+"""
+Make example processes and composites
+"""
 
 
-def get_process_schema(process):
-    ports = process.ports
-    input_ports = ports.get('inputs', {})
-    output_ports = ports.get('outputs', {})
-    name = process.__name__
-    schema = {name: {
-        '_ports': {**input_ports, **output_ports}}}
-    return schema
+@register(
+    identifier='loop',
+    registry=sed_process_registry)
+@ports({
+    'inputs': {
+        'trials': 'int'},
+    'outputs': {
+        'results': 'list'}})
+@annotate('sed:composite:range_iterator')
+class RangeIterator(Composite):
+    def update(self, state):
+        trials = state.get('trials', 0)
+        results = []
+        for i in range(trials):
+            for process_path, process in self.processes.items():
+                # TODO -- get the process state
+                process_states = self.process_state(process_path)
+                if process.process_class == 'function':
+                    input_states = {k: process_states[k] for k in process.input_output_ports['inputs'].keys()}
+                    result = process(**input_states)
+                else:
+                    result = process.update(process_states)
+                results.append(result)
+        return results
+
+
+@register(
+    identifier='sum',
+    registry=sed_process_registry)
+@ports({
+    'inputs': {'values': 'list[float]'},
+    'outputs': {'result': 'float'}})
+@annotate('math:add')
+def add_list(values):
+    if not isinstance(values, list):
+        values = [values]
+    return sum(values)
+
+
+@register(
+    identifier='add_two',
+    registry=sed_process_registry)
+@ports({
+    'inputs': {'a': 'float', 'b': 'float'},
+    'outputs': {'result': 'float'}})
+@annotate('add_two')
+def add_two(a, b):
+    return a + b
+
+
+def run_instance1():
+
+
+    config1 = {
+        'trials': 10,
+        'results': None,  # this should be filled in automatically
+        'for_loop': {
+            '_id': 'loop',
+            '_type': 'sed:composite:range_iterator',
+            'wires': {
+                'trials': 'trials',
+                'results': 'results',
+            },
+            'value': 0,
+            'added': 1,
+            'add': {
+                '_type': 'add_two',
+                '_id': 'add_two',
+                'wires': {
+                    'a': 'value',
+                    'b': 'added',
+                    'result': 'value',
+                },
+            }
+        },
+    }
+
+    sim_experiment = Composite(
+        config=config1,
+        process_registry=sed_process_registry)
+
+    state = {}
+    results = sim_experiment.update(state=state)
+
+    # print(pf(sim_experiment.config))
+    print(results)
+
+    plot_bigraph(config1, out_dir='../composites/out', filename='test1')
+
+
+if __name__ == '__main__':
+    run_instance1()
