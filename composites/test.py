@@ -3,6 +3,7 @@ import copy
 import json
 import types
 import abc
+from abc import ABC
 from functools import reduce
 import operator
 
@@ -41,7 +42,7 @@ def ports(ports_schema):
     allowed = ['inputs', 'outputs']
     assert all(key in allowed for key in
                ports_schema.keys()), f'{[key for key in ports_schema.keys() if key not in allowed]} not allowed as top-level port keys. Allowed keys include {str(allowed)}'
-    ports = ports_schema.get('inputs', {})
+    ports = copy.deepcopy(ports_schema.get('inputs', {}))
     ports.update(ports_schema.get('outputs', {}))
     def decorator(func):
         func.input_output_ports = ports_schema
@@ -212,7 +213,7 @@ class Process:
         return {}
 
 
-class Composite(Process):
+class Composite(Process, ABC):
     config = {}
     processes = None
     states = None
@@ -226,7 +227,11 @@ class Composite(Process):
         self.processes = processes
 
     def process_state(self, process_path):
-        return
+        # TODO -- get the states for this specific process
+        process_value = get_value_from_path(self.config, process_path)
+        wires = process_value['wires']
+        states = {wire_id: self.states[target] for wire_id, target in wires.items()}
+        return states
 
     def to_json(self):
         return serialize_instance(self.config)
@@ -234,10 +239,13 @@ class Composite(Process):
     def update(self, state):
         updates = []
         for process_path, process in self.processes.items():
-            # TODO -- get the states for this specific process
-            process_states = self.states
-            update = process.update(state=process_states)
-            updates.append(update)
+            process_states = self.process_state(process_path)
+            if process.process_class == 'function':
+                result = process(**process_states)
+            else:
+                result = process.update(state=process_states)
+            updates.append(result)
+
         return updates
 
 
@@ -262,9 +270,10 @@ class RangeIterator(Composite):
         for i in range(trials):
             for process_path, process in self.processes.items():
                 # TODO -- get the process state
-                process_states = copy.deepcopy(self.states)
+                process_states = self.process_state(process_path)
                 if process.process_class == 'function':
-                    result = process(**process_states)
+                    input_states = {k: process_states[k] for k in process.input_output_ports['inputs'].keys()}
+                    result = process(**input_states)
                 else:
                     result = process.update(process_states)
                 results.append(result)
@@ -300,6 +309,7 @@ def run_instance1():
 
     config1 = {
         'trials': 10,
+        'results': None,  # this should be filled in automatically
         'for_loop': {
             '_id': 'loop',
             '_type': 'sed:composite:range_iterator',
@@ -326,9 +336,10 @@ def run_instance1():
         process_registry=sed_process_registry)
 
     state = {}
-    sim_experiment.update(state=state)
+    results = sim_experiment.update(state=state)
 
-    print(pf(sim_experiment.config))
+    # print(pf(sim_experiment.config))
+    print(results)
 
     plot_bigraph(config1, out_dir='out', filename='test1')
 
