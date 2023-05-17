@@ -71,6 +71,7 @@ class ProcessRegistry:
             bases = [base.__name__ for base in process.__bases__]
         except:
             bases = None
+
         process_class = None
         if isinstance(process, types.FunctionType):
             process_class = 'function'
@@ -78,6 +79,7 @@ class ProcessRegistry:
             process_class = 'composite'
         elif 'Process' in bases:
             process_class = 'process'
+        process.process_class = process_class  # add process class annotation
 
         # TODO -- assert ports and signature match
         if not annotation:
@@ -179,12 +181,13 @@ def get_processes_states_from_schema(schema, process_registry, path=None):
                     processes[next_path] = process_address(value)
                 elif process_class == 'composite':
                     processes[next_path] = process_address(value, process_registry)  # TODO -- get process config, not full value
+                    value = {}
 
             p, s = get_processes_states_from_schema(value, process_registry, path=next_path)
             processes.update(p)
             states.update(s)
         elif name not in schema_keys:
-            states[next_path] = value
+            states[name] = value
 
     return processes, states
 
@@ -228,9 +231,14 @@ class Composite(Process):
     def to_json(self):
         return serialize_instance(self.config)
 
-    @abc.abstractmethod
-    def run(self):
-        return {}
+    def update(self, state):
+        updates = []
+        for process_path, process in self.processes.items():
+            # TODO -- get the states for this specific process
+            process_states = self.states
+            update = process.update(state=process_states)
+            updates.append(update)
+        return updates
 
 
 """
@@ -246,14 +254,20 @@ Make example processes and composites
         'trials': 'int'},
     'outputs': {
         'results': 'list'}})
-@annotate('sed:range_iterator')
+@annotate('sed:composite:range_iterator')
 class RangeIterator(Composite):
-    def run(self, trials):
+    def update(self, state):
+        trials = state.get('trials', 0)
         results = []
         for i in range(trials):
-            for process in self.processes:
+            for process_path, process in self.processes.items():
                 # TODO -- get the process state
-                result = process.update()
+                process_states = copy.deepcopy(self.states)
+                if process.process_class == 'function':
+                    result = process(**process_states)
+                else:
+                    result = process.update(process_states)
+                results.append(result)
         return results
 
 
@@ -282,16 +296,17 @@ def add_two(a, b):
 
 
 def run_instance1():
+
+
     config1 = {
         'trials': 10,
-        'loop': {
+        'for_loop': {
             '_id': 'loop',
-            '_type': 'sed:range_iterator',
+            '_type': 'sed:composite:range_iterator',
             'wires': {
                 'trials': 'trials',
                 'results': 'results',
             },
-            # 'config': {},
             'value': 0,
             'added': 1,
             'add': {
@@ -304,14 +319,14 @@ def run_instance1():
                 },
             }
         },
-
     }
 
     sim_experiment = Composite(
         config=config1,
         process_registry=sed_process_registry)
 
-    sim_experiment.run()
+    state = {}
+    sim_experiment.update(state=state)
 
     print(pf(sim_experiment.config))
 
