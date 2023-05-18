@@ -15,6 +15,7 @@ schema_keys.extend(['_id', 'config'])
 
 """
 Decorators
+==========
 """
 
 
@@ -22,7 +23,6 @@ def register(registry, identifier=None):
     def decorator(func):
         registry.register(func, identifier=identifier)
         return func
-
     return decorator
 
 
@@ -30,7 +30,6 @@ def annotate(annotation):
     def decorator(func):
         func.annotation = annotation
         return func
-
     return decorator
 
 
@@ -42,11 +41,12 @@ def ports(ports_schema):
     allowed = ['inputs', 'outputs']
     assert all(key in allowed for key in
                ports_schema.keys()), f'{[key for key in ports_schema.keys() if key not in allowed]} not allowed as top-level port keys. Allowed keys include {str(allowed)}'
-    ports = copy.deepcopy(ports_schema.get('inputs', {}))
-    ports.update(ports_schema.get('outputs', {}))
+    process_ports = copy.deepcopy(ports_schema.get('inputs', {}))
+    process_ports.update(ports_schema.get('outputs', {}))
+
     def decorator(func):
         func.input_output_ports = ports_schema
-        func.ports = ports
+        func.ports = process_ports
         return func
 
     return decorator
@@ -54,6 +54,7 @@ def ports(ports_schema):
 
 """
 Registry
+========
 """
 
 
@@ -64,9 +65,9 @@ class ProcessRegistry:
     def register(self, process, identifier=None):
         if not identifier:
             identifier = process.__name__
-        signature = inspect.signature(process)
+        # signature = inspect.signature(process)
         annotation = getattr(process, 'annotation', None)
-        ports = getattr(process, 'ports')
+        process_ports = getattr(process, 'ports')
 
         try:
             bases = [base.__name__ for base in process.__bases__]
@@ -83,14 +84,12 @@ class ProcessRegistry:
         process.process_class = process_class  # add process class annotation
 
         # TODO -- assert ports and signature match
-        if not annotation:
-            raise Exception(f'Process {identifier} requires annotations')
-        if not ports:
-            raise Exception(f'Process {identifier} requires annotations')
+        if not process_ports:
+            raise Exception(f'Process {identifier} requires ports')
 
         item = {
             'annotation': annotation,
-            'ports': ports,
+            'ports': process_ports,
             'address': process,
             'class': process_class,
         }
@@ -116,6 +115,7 @@ sed_process_registry = ProcessRegistry()
 
 """
 More helper functions
+=====================
 """
 
 
@@ -156,7 +156,6 @@ def extract_composite_config(schema):
 def get_processes_states_from_schema(schema, process_registry, path=None):
     schema = copy.deepcopy(schema)
     path = path or ()
-    all_annotations = process_registry.get_annotations()
 
     processes = {}
     states = {}
@@ -166,11 +165,9 @@ def get_processes_states_from_schema(schema, process_registry, path=None):
             if value.get('wires'):
                 # get the process
                 process_id = value.pop('_id')
-                process_type = value.pop('_type')
                 process_wires = value.pop('wires')
                 process = process_registry.access(process_id)
                 process_ports = process['ports']
-                assert process_type in all_annotations, f'{name} needs a type annotation from: {all_annotations}'
                 assert process_wires.keys() == process_ports.keys(), f'{name} wires {list(process_wires.keys())} ' \
                                                                      f'need to match ports {list(process_ports.keys())}'
                 # initialize the process
@@ -181,7 +178,8 @@ def get_processes_states_from_schema(schema, process_registry, path=None):
                 elif process_class == 'process':
                     processes[next_path] = process_address(value)
                 elif process_class == 'composite':
-                    processes[next_path] = process_address(value, process_registry)  # TODO -- get process config, not full value
+                    processes[next_path] = process_address(value,
+                                                           process_registry)  # TODO -- get process config, not full value
                     value = {}
 
             p, s = get_processes_states_from_schema(value, process_registry, path=next_path)
@@ -194,19 +192,21 @@ def get_processes_states_from_schema(schema, process_registry, path=None):
 
 
 """
-Process and Composite base class
+Process and Composite base classes
+==================================
 """
 
 
 class Process:
     config = {}
+    ports = None
 
     def __init__(self, config):
         self.config = config
 
-    @abc.abstractmethod
     def ports(self):
-        return {}
+        assert isinstance(self.ports, dict)
+        return self.ports
 
     @abc.abstractmethod
     def update(self, state):
@@ -226,67 +226,91 @@ class Composite(Process, ABC):
         self.states = states
         self.processes = processes
 
-    def process_state(self, process_path):
-        # TODO -- get the states for this specific process
+    def get_process_wires(self, process_path):
         process_value = get_value_from_path(self.config, process_path)
-        wires = process_value['wires']
-        states = {wire_id: self.states[target] for wire_id, target in wires.items()}
-        return states
+        return process_value['wires']
+
+    def process_state(self, process_path):
+        # get the states for this specific process
+        wires = self.get_process_wires(process_path)
+        return {wire_id: self.states[target] for wire_id, target in wires.items()}
+
+    def inverse_topology(self, process_path, state):
+        wires = self.get_process_wires(process_path)
+        return {wires[port]: v for port, v in state.items()}
 
     def to_json(self):
         return serialize_instance(self.config)
 
+    def apply(self, result):
+        for k, v in result.items():
+            if self.states[k] is None:
+                self.states[k] = v
+            else:
+                self.states[k] += v  # this is strictly accumulate apply method
+
     def update(self, state):
-        updates = []
         for process_path, process in self.processes.items():
             process_states = self.process_state(process_path)
             if process.process_class == 'function':
-                result = process(**process_states)
+                update = process(**process_states)
             else:
-                result = process.update(state=process_states)
-            updates.append(result)
+                update = process.update(state=process_states)
+            absolute_update = self.inverse_topology(process_path, update)
+            self.apply(absolute_update)
 
-        return updates
+        return {
+            port: self.states[port]
+            for port in self.config.get('wires', {}).keys()
+            if port in self.states}
 
 
 """
-Make example processes and composites
+Register example processes and composites
+=========================================
 """
 
 
 @register(
-    identifier='loop',
+    identifier='control:range_iterator',
     registry=sed_process_registry)
 @ports({
     'inputs': {
         'trials': 'int'},
     'outputs': {
         'results': 'list'}})
-@annotate('sed:composite:range_iterator')
+@annotate('more info here?')
 class RangeIterator(Composite):
     def update(self, state):
         trials = state.get('trials', 0)
-        results = []
         for i in range(trials):
             for process_path, process in self.processes.items():
-                # TODO -- get the process state
                 process_states = self.process_state(process_path)
                 if process.process_class == 'function':
                     input_states = {k: process_states[k] for k in process.input_output_ports['inputs'].keys()}
-                    result = process(**input_states)
+                    raw_update = process(**input_states)
+                    if not isinstance(raw_update, list) and not isinstance(raw_update, tuple):
+                        raw_update = [raw_update]
+                    update = {
+                        k: raw_update[idx]
+                        for idx, k in enumerate(process.input_output_ports['outputs'].keys())}
                 else:
-                    result = process.update(process_states)
-                results.append(result)
-        return results
+                    update = process.update(process_states)
+
+                # TODO -- result needs to be applied. need to reverse project?
+                absolute_update = self.inverse_topology(process_path, update)
+                self.apply(absolute_update)
+
+        return {'results': self.states['value']}
 
 
 @register(
-    identifier='sum',
+    identifier='math:sum_list',
     registry=sed_process_registry)
 @ports({
     'inputs': {'values': 'list[float]'},
     'outputs': {'result': 'float'}})
-@annotate('math:add')
+@annotate('more info here?')
 def add_list(values):
     if not isinstance(values, list):
         values = [values]
@@ -294,41 +318,50 @@ def add_list(values):
 
 
 @register(
-    identifier='add_two',
+    identifier='math:add_two',
     registry=sed_process_registry)
 @ports({
     'inputs': {'a': 'float', 'b': 'float'},
     'outputs': {'result': 'float'}})
-@annotate('add_two')
+@annotate('more info here?')
 def add_two(a, b):
     return a + b
 
 
+"""
+Examples
+========
+"""
+
+
 def run_instance1():
-
-
     config1 = {
+        # top-level state
         'trials': 10,
         'results': None,  # this should be filled in automatically
+
+        # a composite process
         'for_loop': {
-            '_id': 'loop',
-            '_type': 'sed:composite:range_iterator',
+            '_id': 'control:range_iterator',
             'wires': {
                 'trials': 'trials',
                 'results': 'results',
             },
+
+            # state within for_loop
             'value': 0,
             'added': 1,
+
+            # process within for_loop
             'add': {
-                '_type': 'add_two',
-                '_id': 'add_two',
+                '_id': 'math:add_two',
                 'wires': {
                     'a': 'value',
                     'b': 'added',
                     'result': 'value',
                 },
             }
-        },
+        }
     }
 
     sim_experiment = Composite(
@@ -337,8 +370,6 @@ def run_instance1():
 
     state = {}
     results = sim_experiment.update(state=state)
-
-    # print(pf(sim_experiment.config))
     print(results)
 
     plot_bigraph(config1, out_dir='../composites/out', filename='test1')
