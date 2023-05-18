@@ -160,6 +160,9 @@ def get_processes_states_from_schema(schema, process_registry, path=None):
     processes = {}
     states = {}
     for name, value in schema.items():
+        if name in schema_keys:
+            continue
+
         next_path = path + (name,)
         if isinstance(value, dict):
             if value.get('wires'):
@@ -185,7 +188,7 @@ def get_processes_states_from_schema(schema, process_registry, path=None):
             p, s = get_processes_states_from_schema(value, process_registry, path=next_path)
             processes.update(p)
             states.update(s)
-        elif name not in schema_keys:
+        else:
             states[name] = value
 
     return processes, states
@@ -202,9 +205,14 @@ class Process:
     ports = None
 
     def __init__(self, config):
-        self.config = config
+        self.initialize_process(config)
 
-    def ports(self):
+    def initialize_process(self, config):
+        self.config = config
+        if self.config.get('_ports'):
+            self.ports = self.config.get('_ports')
+
+    def get_ports(self):
         assert isinstance(self.ports, dict)
         return self.ports
 
@@ -217,9 +225,13 @@ class Composite(Process, ABC):
     config = {}
     processes = None
     states = None
+    process_registry = None
 
     def __init__(self, config, process_registry):
-        self.config = config
+        self.initialize_process(config)
+        self.initialize_composite(process_registry)
+
+    def initialize_composite(self, process_registry):
         self.process_registry = process_registry
         processes, states = get_processes_states_from_schema(
             self.config, self.process_registry)
@@ -244,21 +256,29 @@ class Composite(Process, ABC):
 
     def apply(self, result):
         for k, v in result.items():
-            if self.states[k] is None:
-                self.states[k] = v
-            else:
-                self.states[k] += v  # this is strictly accumulate apply method
+            self.states[k] = v  # this is strictly "set" apply method. TODO -- use an apply_registry
+
+    def update_process(self, process_path, state):
+        process = self.processes[process_path]
+        process_states = self.process_state(process_path)
+        if process.process_class == 'function':
+            input_states = {
+                k: process_states[k] for k in process.input_output_ports['inputs'].keys()}
+            raw_update = process(**input_states)
+            if not isinstance(raw_update, list) and not isinstance(raw_update, tuple):
+                raw_update = [raw_update]
+            update = {
+                k: raw_update[idx]
+                for idx, k in enumerate(process.input_output_ports['outputs'].keys())}
+        else:
+            update = process.update(state=process_states)
+
+        absolute_update = self.inverse_topology(process_path, update)
+        self.apply(absolute_update)
 
     def update(self, state):
-        for process_path, process in self.processes.items():
-            process_states = self.process_state(process_path)
-            if process.process_class == 'function':
-                update = process(**process_states)
-            else:
-                update = process.update(state=process_states)
-            absolute_update = self.inverse_topology(process_path, update)
-            self.apply(absolute_update)
-
+        for process_path in self.processes.keys():
+            self.update_process(process_path, state)
         return {
             port: self.states[port]
             for port in self.config.get('wires', {}).keys()
@@ -285,23 +305,11 @@ class RangeIterator(Composite):
         trials = state.get('trials', 0)
         for i in range(trials):
             for process_path, process in self.processes.items():
-                process_states = self.process_state(process_path)
-                if process.process_class == 'function':
-                    input_states = {k: process_states[k] for k in process.input_output_ports['inputs'].keys()}
-                    raw_update = process(**input_states)
-                    if not isinstance(raw_update, list) and not isinstance(raw_update, tuple):
-                        raw_update = [raw_update]
-                    update = {
-                        k: raw_update[idx]
-                        for idx, k in enumerate(process.input_output_ports['outputs'].keys())}
-                else:
-                    update = process.update(process_states)
-
-                # TODO -- result needs to be applied. need to reverse project?
-                absolute_update = self.inverse_topology(process_path, update)
-                self.apply(absolute_update)
-
-        return {'results': self.states['value']}
+                self.update_process(process_path, state)
+        return {
+            'results': self.states['value'],
+            'trials': 0
+        }
 
 
 @register(
@@ -361,6 +369,10 @@ def run_instance1():
                     'result': 'value',
                 },
             }
+        },
+        'wires': {
+            'results': 'results',
+            'trials': 'trials',
         }
     }
 
