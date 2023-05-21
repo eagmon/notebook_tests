@@ -19,10 +19,11 @@ Decorators
 """
 
 
-def register(registry, identifier=None):
+def register(identifier, registry):
     def decorator(func):
         registry.register(func, identifier=identifier)
         return func
+
     return decorator
 
 
@@ -30,6 +31,7 @@ def annotate(annotation):
     def decorator(func):
         func.annotation = annotation
         return func
+
     return decorator
 
 
@@ -164,30 +166,47 @@ def get_processes_states_from_schema(schema, process_registry, path=None):
             continue
 
         next_path = path + (name,)
-        if isinstance(value, dict):
-            if value.get('wires'):
-                # get the process
-                process_id = value.pop('_id')
-                process_wires = value.pop('wires')
-                process = process_registry.access(process_id)
+        if isinstance(value, dict) and value.get('wires'):
+            # get the process
+            process_id = value.pop('_id')
+            process_wires = value.pop('wires')
+            process_depends_on = value.get('_depends_on', [])
+            process = process_registry.access(process_id)
+            try:
                 process_ports = process['ports']
-                assert process_wires.keys() == process_ports.keys(), f'{name} wires {list(process_wires.keys())} ' \
-                                                                     f'need to match ports {list(process_ports.keys())}'
-                # initialize the process
-                process_class = process['class']
-                process_address = process['address']
-                if process_class == 'function':
-                    processes[next_path] = process_address
-                elif process_class == 'process':
-                    processes[next_path] = process_address(value)
-                elif process_class == 'composite':
-                    processes[next_path] = process_address(value,
-                                                           process_registry)  # TODO -- get process config, not full value
-                    value = {}
+            except:
+                raise Exception(f'process {process} has no ports')
+
+            assert process_wires.keys() == process_ports.keys(), f'{name} wires {list(process_wires.keys())} ' \
+                                                                 f'need to match ports {list(process_ports.keys())}'
+            # initialize the process
+            process_class = process['class']
+            process_address = process['address']
+            if process_class == 'function':
+                actual_process = process_address
+            elif process_class == 'process':
+                actual_process = process_address(value)
+            elif process_class == 'composite':
+                actual_process = process_address(value,
+                                                 process_registry)  # TODO -- get process config, not full value
+                value = {}
+
+            # set depends on
+            # actual_process.depends_on = process_depends_on
+            processes[next_path] = {'address': actual_process, '_depends_on': process_depends_on}
+
+            # initialize connected states
+            for port_id, wire in process_wires.items():
+                if wire not in states:
+                    port_type = process_ports[port_id]
+                    states.update({wire: None})
 
             p, s = get_processes_states_from_schema(value, process_registry, path=next_path)
             processes.update(p)
-            states.update(s)
+            for k, v in s.items():
+                if states.get(k) is None:  # not None
+                    states.update(s)
+
         else:
             states[name] = value
 
@@ -198,6 +217,28 @@ def get_processes_states_from_schema(schema, process_registry, path=None):
 Process and Composite base classes
 ==================================
 """
+
+
+def topological_sort(graph):
+    """Return list of sorted process names based on dependencies"""
+    visited = set()
+    sorted_list = []
+
+    def visit(path):
+        if path not in visited:
+            visited.add(path)
+            if path in graph:
+                depends_on = graph[path]['_depends_on']
+                if depends_on:
+                    for neighbor in depends_on:
+                        if not isinstance(neighbor, tuple):
+                            neighbor = (neighbor,)
+                        visit(neighbor)
+            sorted_list.append(path)
+
+    for path, node in graph.items():
+        visit(path)
+    return sorted_list
 
 
 class Process:
@@ -237,6 +278,7 @@ class Composite(Process, ABC):
             self.config, self.process_registry)
         self.states = states
         self.processes = processes
+        self.sorted_processes = topological_sort(processes)
 
     def get_process_wires(self, process_path):
         process_value = get_value_from_path(self.config, process_path)
@@ -259,7 +301,7 @@ class Composite(Process, ABC):
             self.states[k] = v  # this is strictly "set" apply method. TODO -- use an apply_registry
 
     def update_process(self, process_path, state):
-        process = self.processes[process_path]
+        process = self.processes[process_path]['address']
         process_states = self.process_state(process_path)
         if process.process_class == 'function':
             input_states = {
@@ -269,7 +311,7 @@ class Composite(Process, ABC):
                 raw_update = [raw_update]
             update = {
                 k: raw_update[idx]
-                for idx, k in enumerate(process.input_output_ports['outputs'].keys())}
+                for idx, k in enumerate(process.input_output_ports.get('outputs', {}).keys())}
         else:
             update = process.update(state=process_states)
 
@@ -277,7 +319,7 @@ class Composite(Process, ABC):
         self.apply(absolute_update)
 
     def update(self, state):
-        for process_path in self.processes.keys():
+        for process_path in self.sorted_processes:
             self.update_process(process_path, state)
         return {
             port: self.states[port]
