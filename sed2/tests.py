@@ -2,9 +2,11 @@ from bigraph_viz import plot_bigraph, plot_flow, pf
 from bigraph_viz.dict_utils import schema_keys
 from sed2.core import register, ports, annotate, Composite, ProcessRegistry
 from sed2.processes import sed_process_registry
+import numpy as np
 
 schema_keys.extend(['_id', 'config'])
 sbml_model_path = 'susceptible_zombie.xml'
+sbml_model_description_path = 'susceptible_zombie.csv'
 
 
 def ex1():
@@ -107,6 +109,172 @@ def ex2():
     print(results)
 
 
+def ex3():
+    instance3 = {
+        'model_path': sbml_model_path,
+        'sbml_model_from_path': {
+            '_id': 'model_path',
+            'wires': {
+                'path_to_sbml': 'model_path',
+                'model': 'model_instance'
+            },
+        },
+        'element_id': 'Z',
+        'element_value': 0.0,
+        'model_set_value': {
+            '_id': 'set_model',
+            'wires': {
+                'model_instance': 'model_instance',
+                'element_id': 'element_id',
+                'value': 'element_value'
+            },
+            '_depends_on': ['sbml_model_from_path']
+        },
+        'selection_list': ['S', 'Z'],
+        'steady_state_values': {
+            '_id': 'steady_state',
+            'wires': {
+                'model': 'model_instance',
+                # 'time_start': 'time_start',
+                # 'time_end': 'time_end',
+                # 'num_points': 'num_points',
+                'selection_list': 'selection_list',
+                'results': 'results',
+            },
+            '_depends_on': ['model_set_value']
+        },
+        'report': {
+            '_id': 'report',
+            'wires': {
+                'results': 'results',
+                'title': 'UTC'  # this should be optional
+            },
+            '_depends_on': ['steady_state_values']
+        }
+    }
+
+    sim_experiment = Composite(
+        config=instance3,
+        process_registry=sed_process_registry)
+
+    state = {}
+    results = sim_experiment.update(state=state)
+
+
+def ex4():
+    instance4 = {
+        'model_path': sbml_model_path,
+        'sbml_model_from_path': {
+            '_id': 'model_path',
+            'wires': {
+                'path_to_sbml': 'model_path',
+                'model': 'model_instance'
+            },
+        },
+        'repeated_sim_config': {'Z': list(range(1, 11))},
+        'repeated_simulation': {
+            '_id': 'repeated_simulation',
+            'wires': {
+                'model_instance': 'model_instance',
+                'config': 'repeated_sim_config',
+                'results': 'results',
+            },
+            '_depends_on': ['sbml_model_from_path']
+        },
+        'report': {
+            '_id': 'report',
+            'wires': {
+                'results': 'results',
+                'title': 'UTC'  # this should be optional
+            },
+            '_depends_on': ['repeated_simulation']
+        }
+    }
+
+    sim_experiment = Composite(
+        config=instance4,
+        process_registry=sed_process_registry)
+
+    state = {}
+    results = sim_experiment.update(state=state)
+
+
+def ex5():
+    instance5 = {
+        'model_path': sbml_model_path,
+        'data_description_path': sbml_model_description_path,
+        'data_format': '"CSV"',
+        'UTC': '"UTC"',
+        'time_start': 0,
+        'time_end': 10,
+        'num_points': 5,
+        'sbml_model_from_path': {
+            '_id': 'model_path',
+            'wires': {
+                'path_to_sbml': 'model_path',
+                'model': 'model_instance'
+            },
+        },
+        'data_description': {
+            '_id': 'data_description',
+            'wires': {
+                'data_file': 'data_description_path',
+                'file_format': 'data_format',
+                'data': 'SZ_data',  # the output
+            },
+        },
+
+        # a composite process
+        'n_dimensional_scan': {
+            '_id': 'control:range_iterator',
+            'wires': {
+                'trials': 'trials',
+                'results': 'results',
+            },
+
+            'n_dimensional_scan_config': {
+                'S': np.arange(0.0, 0.010, step=0.002),
+                'Z': np.arange(0.0, 0.010, step=0.002)
+            },
+
+            # state within for_loop
+            'value': 10,
+            'added': 0.5,
+
+            # process within for_loop
+            'add': {
+                '_id': 'math:add_two',
+                'wires': {
+                    'a': 'value',
+                    'b': 'added',
+                    'result': 'value',
+                },
+            },
+            '_depends_on': ['sbml_model_from_path']
+        },
+
+        'report': {
+            '_id': 'report',
+            'wires': {
+                'results': 'results',
+                'title': 'UTC'  # this should be optional
+            },
+            '_depends_on': ['n_dimensional_scan']
+        }
+    }
+
+    sim_experiment = Composite(
+        config=instance5,
+        process_registry=sed_process_registry)
+
+    state = {}
+    results = sim_experiment.update(state=state)
+
+
+
 if __name__ == '__main__':
     # ex1()
-    ex2()
+    # ex2()
+    # ex3()
+    # ex4()
+    ex5()

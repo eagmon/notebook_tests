@@ -98,6 +98,8 @@ class ProcessRegistry:
         self.registry[identifier] = item
 
     def access(self, name):
+        if name not in self.registry:
+            raise Exception(f'{name} not in the registry')
         return self.registry.get(name)
 
     def get_annotations(self):

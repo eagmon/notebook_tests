@@ -63,7 +63,7 @@ def model_reset(model_instance):
     model_instance.reset()
 
 
-@register('model_set', sed_process_registry)
+@register('set_model', sed_process_registry)
 @ports({
     'inputs': {
         'model_instance': 'Model',
@@ -249,6 +249,7 @@ def n_dimensional_scan(
     return results
 
 
+@register('repeated_simulation', sed_process_registry)
 @ports({
     'inputs': {'model_instance': 'Model', 'config': 'dict'},
     'outputs': {'results': 'list'}})
