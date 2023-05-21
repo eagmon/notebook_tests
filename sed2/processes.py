@@ -212,8 +212,10 @@ def report(results, title):
     if isinstance(results, list):
         for result in results:
             report_dict(result)
-    if isinstance(results, dict):
+    elif isinstance(results, dict):
         report_dict(results)
+    else:
+        print(results)
 
 
 @ports({

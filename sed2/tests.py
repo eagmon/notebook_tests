@@ -202,12 +202,10 @@ def ex4():
 def ex5():
     instance5 = {
         'model_path': sbml_model_path,
-        'data_description_path': sbml_model_description_path,
-        'data_format': '"CSV"',
+        'model_instance': None,
         'UTC': '"UTC"',
-        'time_start': 0,
-        'time_end': 10,
-        'num_points': 5,
+
+        # load the model
         'sbml_model_from_path': {
             '_id': 'model_path',
             'wires': {
@@ -215,44 +213,41 @@ def ex5():
                 'model': 'model_instance'
             },
         },
-        'data_description': {
-            '_id': 'data_description',
-            'wires': {
-                'data_file': 'data_description_path',
-                'file_format': 'data_format',
-                'data': 'SZ_data',  # the output
-            },
-        },
+
+        # set up trials
+        's_trials': 5,
 
         # a composite process
         'n_dimensional_scan': {
             '_id': 'control:range_iterator',
             'wires': {
-                'trials': 'trials',
+                'trials': 's_trials',
                 'results': 'results',
             },
-
-            'n_dimensional_scan_config': {
-                'S': np.arange(0.0, 0.010, step=0.002),
-                'Z': np.arange(0.0, 0.010, step=0.002)
-            },
+            '_depends_on': ['sbml_model_from_path'],
 
             # state within for_loop
-            'value': 10,
-            'added': 0.5,
+            'time_start': 0,
+            'time_end': 10,
+            'num_points': 5,
 
             # process within for_loop
-            'add': {
-                '_id': 'math:add_two',
+            'uniform_time_course': {
+                '_id': 'uniform_time_course',
                 'wires': {
-                    'a': 'value',
-                    'b': 'added',
-                    'result': 'value',
+                    'model': ['..', 'model_instance'],  # TODO -- get these to connect
+                    'time_start': 'time_start',
+                    'time_end': 'time_end',
+                    'num_points': 'num_points',
+                    'selection_list': 'selection_list',
+                    'results': 'results',
                 },
+                '_depends_on': ['sbml_model_from_path'],
             },
-            '_depends_on': ['sbml_model_from_path']
         },
+        'results': None,
 
+        # report results
         'report': {
             '_id': 'report',
             'wires': {
