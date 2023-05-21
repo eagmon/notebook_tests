@@ -59,8 +59,6 @@ def ex1():
 
     state = {}
     results = sim_experiment.update(state=state)
-
-    # print(pf(sim_experiment.config))
     print(results)
 
 
@@ -104,8 +102,6 @@ def ex2():
 
     state = {}
     results = sim_experiment.update(state=state)
-
-    # print(pf(sim_experiment.config))
     print(results)
 
 
@@ -219,9 +215,10 @@ def ex5():
 
         # a composite process
         'n_dimensional_scan': {
-            '_id': 'control:range_iterator',
+            '_id': 'control:range_iterator:model',
             'wires': {
                 'trials': 's_trials',
+                'model_instance': 'model_instance',
                 'results': 'results',
             },
             '_depends_on': ['sbml_model_from_path'],
@@ -235,7 +232,7 @@ def ex5():
             'uniform_time_course': {
                 '_id': 'uniform_time_course',
                 'wires': {
-                    'model': ['..', 'model_instance'],  # TODO -- get these to connect
+                    'model': 'model_instance',  #  ['..', 'model_instance'],  # TODO -- get these to connect
                     'time_start': 'time_start',
                     'time_end': 'time_end',
                     'num_points': 'num_points',

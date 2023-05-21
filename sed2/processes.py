@@ -167,7 +167,7 @@ def steady_state_values(model, selection_list):
     return result_dict
 
 
-@register('is_stead_state', sed_process_registry)
+@register('is_steady_state', sed_process_registry)
 @ports({
     'inputs': {
         'model': 'Model',

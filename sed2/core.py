@@ -340,7 +340,8 @@ Register example processes and composites
     registry=sed_process_registry)
 @ports({
     'inputs': {
-        'trials': 'int'},
+        'trials': 'int',
+    },
     'outputs': {
         'results': 'list'}})
 @annotate('more info here?')
@@ -353,6 +354,30 @@ class RangeIterator(Composite):
         return {
             'results': self.states['value'],
             'trials': 0
+        }
+
+
+@register(
+    identifier='control:range_iterator:model',
+    registry=sed_process_registry)
+@ports({
+    'inputs': {
+        'trials': 'int',
+        'model_instance': 'Model',
+    },
+    'outputs': {
+        'results': 'list'}})
+@annotate('more info here?')
+class RangeIteratorModel(Composite):
+    def update(self, state):
+        trials = state.get('trials', 0)
+        self.states['model_instance'] = state['model_instance']  # move model in
+        for i in range(trials):
+            for process_path, process in self.processes.items():
+                self.update_process(process_path, state)
+        return {
+            'results': self.states['results'],
+            # 'trials': 0
         }
 
 
