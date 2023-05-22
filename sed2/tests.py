@@ -4,7 +4,7 @@ from sed2.core import register, ports, annotate, Composite, ProcessRegistry
 from sed2.processes import sed_process_registry
 import numpy as np
 
-schema_keys.extend(['_id', 'config'])
+schema_keys.extend(['_class', 'config'])
 sbml_model_path = 'susceptible_zombie.xml'
 sbml_model_description_path = 'susceptible_zombie.csv'
 
@@ -23,14 +23,14 @@ def ex1():
         },
         'figure1name': '"Figure1"',
         'sbml_model_from_path': {
-            '_id': 'model_path',
+            '_class': 'model_path',
             'wires': {
                 'path_to_sbml': 'model_path',
                 'model': 'model_instance'
             },
         },
         'plot2d': {
-            '_id': 'plot2D',
+            '_class': 'plot2D',
             'wires': {
                 'results': 'results',
                 'curves': 'curves',
@@ -40,7 +40,7 @@ def ex1():
             '_depends_on': ['uniform_time_course'],
         },
         'uniform_time_course': {
-            '_id': 'uniform_time_course',
+            '_class': 'uniform_time_course',
             'wires': {
                 'model': 'model_instance',
                 'time_start': 'time_start',
@@ -68,14 +68,14 @@ def ex2():
         'UTC': '"UTC"',
         'selection_list': ['S', 'Z'],
         'sbml_model_from_path': {
-            '_id': 'model_path',
+            '_class': 'model_path',
             'wires': {
                 'path_to_sbml': 'model_path',
                 'model': 'model_instance'
             },
         },
         'steady_state_values': {
-            '_id': 'steady_state',
+            '_class': 'steady_state',
             'wires': {
                 'model': 'model_instance',
                 # 'time_start': 'time_start',
@@ -87,7 +87,7 @@ def ex2():
             '_depends_on': ['sbml_model_from_path']
         },
         'report': {
-            '_id': 'report',
+            '_class': 'report',
             'wires': {
                 'results': 'results',
                 'title': 'UTC'  # this should be optional
@@ -109,7 +109,7 @@ def ex3():
     instance3 = {
         'model_path': sbml_model_path,
         'sbml_model_from_path': {
-            '_id': 'model_path',
+            '_class': 'model_path',
             'wires': {
                 'path_to_sbml': 'model_path',
                 'model': 'model_instance'
@@ -118,7 +118,7 @@ def ex3():
         'element_id': 'Z',
         'element_value': 0.0,
         'model_set_value': {
-            '_id': 'set_model',
+            '_class': 'set_model',
             'wires': {
                 'model_instance': 'model_instance',
                 'element_id': 'element_id',
@@ -128,7 +128,7 @@ def ex3():
         },
         'selection_list': ['S', 'Z'],
         'steady_state_values': {
-            '_id': 'steady_state',
+            '_class': 'steady_state',
             'wires': {
                 'model': 'model_instance',
                 # 'time_start': 'time_start',
@@ -140,7 +140,7 @@ def ex3():
             '_depends_on': ['model_set_value']
         },
         'report': {
-            '_id': 'report',
+            '_class': 'report',
             'wires': {
                 'results': 'results',
                 'title': 'UTC'  # this should be optional
@@ -161,7 +161,7 @@ def ex4():
     instance4 = {
         'model_path': sbml_model_path,
         'sbml_model_from_path': {
-            '_id': 'model_path',
+            '_class': 'model_path',
             'wires': {
                 'path_to_sbml': 'model_path',
                 'model': 'model_instance'
@@ -169,7 +169,7 @@ def ex4():
         },
         'repeated_sim_config': {'Z': list(range(1, 11))},
         'repeated_simulation': {
-            '_id': 'repeated_simulation',
+            '_class': 'repeated_simulation',
             'wires': {
                 'model_instance': 'model_instance',
                 'config': 'repeated_sim_config',
@@ -178,7 +178,7 @@ def ex4():
             '_depends_on': ['sbml_model_from_path']
         },
         'report': {
-            '_id': 'report',
+            '_class': 'report',
             'wires': {
                 'results': 'results',
                 'title': 'UTC'  # this should be optional
@@ -203,7 +203,7 @@ def ex5():
 
         # load the model
         'sbml_model_from_path': {
-            '_id': 'model_path',
+            '_class': 'model_path',
             'wires': {
                 'path_to_sbml': 'model_path',
                 'model': 'model_instance'
@@ -215,13 +215,13 @@ def ex5():
 
         # a composite process
         'n_dimensional_scan': {
-            '_id': 'control:range_iterator:model',
+            '_class': 'control:range_iterator:model',
             'wires': {
                 'trials': 's_trials',
                 'model_instance': 'model_instance',
                 'results': 'results',
             },
-            '_depends_on': ['sbml_model_from_path'],
+            '_depends_on': ['..', 'sbml_model_from_path'],
 
             # state within for_loop
             'time_start': 0,
@@ -230,7 +230,7 @@ def ex5():
 
             # process within for_loop
             'uniform_time_course': {
-                '_id': 'uniform_time_course',
+                '_class': 'uniform_time_course',
                 'wires': {
                     'model': 'model_instance',  #  ['..', 'model_instance'],  # TODO -- get these to connect
                     'time_start': 'time_start',
@@ -246,7 +246,7 @@ def ex5():
 
         # report results
         'report': {
-            '_id': 'report',
+            '_class': 'report',
             'wires': {
                 'results': 'results',
                 'title': 'UTC'  # this should be optional

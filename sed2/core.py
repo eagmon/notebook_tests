@@ -11,7 +11,7 @@ import numpy as np
 from bigraph_viz import plot_bigraph, pf, pp
 from bigraph_viz.dict_utils import schema_keys
 
-schema_keys.extend(['_id', 'config'])
+schema_keys.extend(['_class', 'config'])
 
 """
 Decorators
@@ -170,10 +170,10 @@ def get_processes_states_from_schema(schema, process_registry, path=None):
         next_path = path + (name,)
         if isinstance(value, dict) and value.get('wires'):
             # get the process
-            process_id = value.pop('_id')
+            process_class = value.pop('_class')
             process_wires = value.pop('wires')
             process_depends_on = value.get('_depends_on', [])
-            process = process_registry.access(process_id)
+            process = process_registry.access(process_class)
             try:
                 process_ports = process['ports']
             except:
@@ -419,7 +419,7 @@ def run_instance1():
 
         # a composite process
         'for_loop': {
-            '_id': 'control:range_iterator',
+            '_class': 'control:range_iterator',
             'wires': {
                 'trials': 'trials',
                 'results': 'results',
@@ -431,7 +431,7 @@ def run_instance1():
 
             # process within for_loop
             'add': {
-                '_id': 'math:add_two',
+                '_class': 'math:add_two',
                 'wires': {
                     'a': 'value',
                     'b': 'added',
