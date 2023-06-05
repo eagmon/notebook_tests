@@ -5,6 +5,7 @@ import tellurium as te
 import pandas as pd
 from sed2.core import ports, annotate, register, sed_process_registry
 import libsbml
+import sympy
 
 
 def load_model(filename):
@@ -291,4 +292,40 @@ def plot2d(results, curves, name):
     }
     # plt.legend()
     # plt.show()
+
+
+@register('math:solve_equations', sed_process_registry)
+@ports({
+    'inputs': {
+        'equation_str': 'string',
+        'initial_vars': 'dict',
+        'parameters': 'dict',
+    },
+    'outputs': {
+        'results': 'dict'
+    }})
+def solve_equation(equation_str, initial_vars, parameters):
+    # Combine all variables and parameters into one dictionary for easy substitution
+    all_symbols = {**initial_vars, **parameters}
+
+    # Create sympy symbols for each variable and parameter
+    sympy_symbols = {symbol: sympy.symbols(symbol) for symbol in all_symbols.keys()}
+
+    # Convert the string equation to a sympy expression
+    equation = sympy.sympify(equation_str)
+
+    # Substitute the sympy symbols and their values into the equation
+    for symbol, value in parameters.items():
+        equation = equation.subs(sympy_symbols[symbol], value)
+
+    # Solve the equation
+    solution = sympy.solve(equation, sympy_symbols[list(initial_vars.keys())[0]])
+
+    # Check the type of the solution and convert it to a dictionary if necessary
+    if isinstance(solution, list):
+        solution_dict = {str(list(initial_vars.keys())[0]): sol for sol in solution}
+    else:
+        raise ValueError("Unknown solution type!")
+    # print(solution_dict)
+    return solution_dict
 

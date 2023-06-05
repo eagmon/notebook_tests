@@ -263,10 +263,40 @@ def ex5():
     results = sim_experiment.update(state=state)
 
 
+def run_math():
+    math_example = {
+        'equation': 'x**2 + a*x + b',
+        'vars': {'x': 0},
+        'params': {'a': 1, 'b': -6},
+        # 'results': {},
+        'math_process': {
+            '_type': 'math:solve_equations',
+            'wires': {
+                'equation_str': 'equation',
+                'initial_vars': 'vars',
+                'parameters': 'params',
+                'results': 'results',
+            },
+        },
+        'wires': {
+            'results': 'results',
+        }
+    }
+
+    math_example_experiment = Composite(
+        config=math_example,
+        process_registry=sed_process_registry)
+
+    results = math_example_experiment.update()
+
+    print(pf(results))
+
+
 
 if __name__ == '__main__':
     # ex1()
     # ex2()
     # ex3()
     # ex4()
-    ex5()
+    # ex5()
+    run_math()

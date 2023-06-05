@@ -11,7 +11,9 @@ import numpy as np
 from bigraph_viz import plot_bigraph, pf, pp
 from bigraph_viz.dict_utils import schema_keys
 
-schema_keys.extend(['_class', 'config'])
+from sed2.dict_utils import deep_merge
+
+schema_keys.extend(['_type', 'config'])
 
 """
 Decorators
@@ -170,7 +172,7 @@ def get_processes_states_from_schema(schema, process_registry, path=None):
         next_path = path + (name,)
         if isinstance(value, dict) and value.get('wires'):
             # get the process
-            process_class = value.pop('_class')
+            process_class = value.pop('_type')
             process_wires = value.pop('wires')
             process_depends_on = value.get('_depends_on', [])
             process = process_registry.access(process_class)
@@ -305,6 +307,8 @@ class Composite(Process, ABC):
     def update_process(self, process_path, state):
         process = self.processes[process_path]['address']
         process_states = self.process_state(process_path)
+
+        # process_states = deep_merge(process_states, state)  # TODO -- update process_states with state. need to inverse topology
         if process.process_class == 'function':
             input_states = {
                 k: process_states[k] for k in process.input_output_ports['inputs'].keys()}
@@ -320,7 +324,7 @@ class Composite(Process, ABC):
         absolute_update = self.inverse_topology(process_path, update)
         self.apply(absolute_update)
 
-    def update(self, state):
+    def update(self, state=None):
         for process_path in self.sorted_processes:
             self.update_process(process_path, state)
         return {
@@ -419,7 +423,7 @@ def run_instance1():
 
         # a composite process
         'for_loop': {
-            '_class': 'control:range_iterator',
+            '_type': 'control:range_iterator',
             'wires': {
                 'trials': 'trials',
                 'results': 'results',
@@ -431,7 +435,7 @@ def run_instance1():
 
             # process within for_loop
             'add': {
-                '_class': 'math:add_two',
+                '_type': 'math:add_two',
                 'wires': {
                     'a': 'value',
                     'b': 'added',
