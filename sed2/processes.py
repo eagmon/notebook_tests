@@ -294,7 +294,7 @@ def plot2d(results, curves, name):
     # plt.show()
 
 
-@register('math:solve_equations', sed_process_registry)
+@register('math:solve_equation', sed_process_registry)
 @ports({
     'inputs': {
         'equation_str': 'string',

@@ -270,7 +270,7 @@ def run_math():
         'params': {'a': 1, 'b': -6},
         # 'results': {},
         'math_process': {
-            '_type': 'math:solve_equations',
+            '_type': 'math:solve_equation',
             'wires': {
                 'equation_str': 'equation',
                 'initial_vars': 'vars',
