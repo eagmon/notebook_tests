@@ -44,18 +44,17 @@ def generate_graph_from_file(file_path, output_file=None):
     graph.render(filename=output_file, format='png', cleanup=True)
 
 
-def create_modified_graph():
-    # input_file_path = 'out/NIH_NIA/gut_microbiome'
+def create_modified_microbiome_graph():
     modified_file_path = 'out/NIH_NIA/gut_microbiome_modified'
     output_graph_file = 'out/NIH_NIA/gut_microbiome_graph'
-    # new_attributes = '''
-    # graph [nodesep=0.02, ranksep=0.02 dpi=300 overlap=false size="4,8" ratio="fill"]
-    # '''
-    # # make a new graphvi file
-    # edit_graphviz(
-    #     input_file_path=input_file_path,
-    #     new_attributes=new_attributes,
-    #     output_file_path=modified_file_path)
+
+    # plot it and save
+    file_path = get_absolute_path(modified_file_path)
+    generate_graph_from_file(file_path=file_path, output_file=output_graph_file)
+
+def create_modified_aim4_graph():
+    modified_file_path = 'out/NIH_NIA/aim4_modified'
+    output_graph_file = 'out/NIH_NIA/aim4_graph'
 
     # plot it and save
     file_path = get_absolute_path(modified_file_path)
@@ -63,4 +62,4 @@ def create_modified_graph():
 
 
 if __name__ == '__main__':
-    create_modified_graph()
+    create_modified_aim4_graph()

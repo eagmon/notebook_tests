@@ -1,0 +1,47 @@
+digraph bigraph {
+	dpi=250 overlap=false rankdir=TB size="8,5"
+	node [fontsize="12pt" margin=0.05 penwidth=2 shape=circle]
+	"('community',)" [label=<community>]
+	"('community', 'species1')" [label=<species1>]
+	"('community', 'species1', 'cell1')" [label=<cell1>]
+	"('community', 'species1', 'cell2')" [label=<cell2>]
+	"('community', 'species1', '...')" [label=<...>]
+	"('community', 'species2')" [label=<species2>]
+	"('community', 'species2', 'cell1')" [label=<cell1>]
+	"('community', 'species2', 'cell2')" [label=<cell2>]
+	"('community', 'species2', '...')" [label=<...>]
+	node [constraint=false fontsize="12pt" margin=0.05 penwidth=2 shape=box]
+	"('community', 'ABM')" [label=<ABM>]
+	edge [arrowhead=none penwidth=2]
+	edge [style=filled]
+	"('community', 'species1')" -> "('community', 'species1', 'cell1')"
+	edge [style=filled]
+	"('community', 'species1')" -> "('community', 'species1', 'cell2')"
+	edge [style=filled]
+	"('community', 'species1')" -> "('community', 'species1', '...')"
+	edge [style=filled]
+	"('community', 'species2')" -> "('community', 'species2', 'cell1')"
+	edge [style=filled]
+	"('community', 'species2')" -> "('community', 'species2', 'cell2')"
+	edge [style=filled]
+	"('community', 'species2')" -> "('community', 'species2', '...')"
+	edge [style=filled]
+	"('community',)" -> "('community', 'species1')"
+	edge [style=filled]
+	"('community',)" -> "('community', 'species2')"
+	edge [style=invis]
+	"('community',)" -> "('community', 'ABM')"
+	edge [arrowhead=dot arrowsize=0.5 penwidth=1 style=dashed]
+	"('community', 'species1')" [label=<species1> fontsize="12pt" margin=0.05 penwidth=2 shape=circle]
+	"('community', 'species2')" [label=<species2> fontsize="12pt" margin=0.05 penwidth=2 shape=circle]
+	subgraph "('community', 'ABM')" {
+		"('community', 'species1')" -> "('community', 'ABM')"
+		"('community', 'species2')" -> "('community', 'ABM')"
+	}
+	edge [arrowhead=dot arrowsize=0.5 penwidth=1 style=dashed]
+	edge [arrowhead=none arrowtail=dot dir=both penwidth=1 style=dashed]
+	subgraph "[('environment',), ('community',)]" {
+		rank=same
+		"('community',)"
+	}
+}
