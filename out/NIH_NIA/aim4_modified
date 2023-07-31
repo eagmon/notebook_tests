@@ -1,47 +1,114 @@
 digraph bigraph {
-	dpi=250 overlap=false rankdir=TB size="8,5"
-	node [fontsize="12pt" margin=0.05 penwidth=2 shape=circle]
-	"('community',)" [label=<community>]
-	"('community', 'species1')" [label=<species1>]
-	"('community', 'species1', 'cell1')" [label=<cell1>]
-	"('community', 'species1', 'cell2')" [label=<cell2>]
-	"('community', 'species1', '...')" [label=<...>]
-	"('community', 'species2')" [label=<species2>]
-	"('community', 'species2', 'cell1')" [label=<cell1>]
-	"('community', 'species2', 'cell2')" [label=<cell2>]
-	"('community', 'species2', '...')" [label=<...>]
-	node [constraint=false fontsize="12pt" margin=0.05 penwidth=2 shape=box]
-	"('community', 'ABM')" [label=<ABM>]
+	graph [nodesep=0.03, ranksep=0.02 dpi=300 overlap=false rankdir=TB size="4,6" ratio="fill"]
+	node [fontsize="13pt" margin=0.02 penwidth=2 shape=circle]
+	"('GI<br/>tract',)" [label=<GI<br/>tract>]
+	"('GI<br/>tract', 'Duodenum')" [label=<Duodenum>]
+	"('GI<br/>tract', 'Duodenum', 'Lumen')" [label=<Lumen>]
+	"('GI<br/>tract', 'Duodenum', 'Lumen', 'nutrients')" [label=<nutrients>]
+	"('GI<br/>tract', 'Duodenum', 'Mucosa')" [label=<Mucosa>]
+	"('GI<br/>tract', 'Duodenum', 'Mucosa', 'mucus')" [label=<mucus>]
+	"('GI<br/>tract', 'Duodenum', 'Mucosa', 'mucin')" [label=<mucin>]
+	"('GI<br/>tract', 'Duodenum', 'Mucosa', 'diffusivity')" [label=<diffusivity>]
+	"('GI<br/>tract', 'Duodenum', 'Epithelium')" [label=<Epithelium>]
+	"('GI<br/>tract', 'Duodenum', 'Epithelium', 'crypts')" [label=<crypts>]
+	"('GI<br/>tract', 'Duodenum', 'Microbiota')" [label=<Microbiota>]
+	"('GI<br/>tract', 'Duodenum', 'Microbiota', 'bacterial<br/>species')" [label=<bacterial<br/>species>]
+	"('GI<br/>tract', 'Duodenum', 'Microbiota', 'bacterial<br/>species', 'mucinase')" [label=<mucinase>]
+	"('GI<br/>tract', 'Duodenum', 'Microbiota', 'bacterial<br/>species', 'flagella')" [label=<flagella>]
+	"('GI<br/>tract', 'Jejunum')" [label=<Jejunum>]
+	"('GI<br/>tract', 'Ileum')" [label=<Ileum>]
+	"('GI<br/>tract', 'Colon')" [label=<Colon>]
+	node [constraint=false fontsize="13pt" margin=0.02 penwidth=2 shape=box]
+	"('GI<br/>tract', 'Duodenum', 'Mucosa', 'multiscale<br/>diffusion')" [label=<multiscale<br/>diffusion>]
+	"('GI<br/>tract', 'Duodenum', 'degradation<br/>(Poisson)')" [label=<degradation<br/>(Poisson)>]
+	"('GI<br/>tract', 'Duodenum', 'spatial<br/>migration<br/>model<br/>(PDE)')" [label=<spatial<br/>migration<br/>model<br/>(PDE)>]
+	"('GI<br/>tract', 'Peristalsis<br/>(compartmental)')" [label=<Peristalsis<br/>(compartmental)>]
 	edge [arrowhead=none penwidth=2]
 	edge [style=filled]
-	"('community', 'species1')" -> "('community', 'species1', 'cell1')"
+	"('GI<br/>tract', 'Duodenum', 'Lumen')" -> "('GI<br/>tract', 'Duodenum', 'Lumen', 'nutrients')"
 	edge [style=filled]
-	"('community', 'species1')" -> "('community', 'species1', 'cell2')"
+	"('GI<br/>tract', 'Duodenum', 'Mucosa')" -> "('GI<br/>tract', 'Duodenum', 'Mucosa', 'mucus')"
 	edge [style=filled]
-	"('community', 'species1')" -> "('community', 'species1', '...')"
+	"('GI<br/>tract', 'Duodenum', 'Mucosa')" -> "('GI<br/>tract', 'Duodenum', 'Mucosa', 'mucin')"
 	edge [style=filled]
-	"('community', 'species2')" -> "('community', 'species2', 'cell1')"
-	edge [style=filled]
-	"('community', 'species2')" -> "('community', 'species2', 'cell2')"
-	edge [style=filled]
-	"('community', 'species2')" -> "('community', 'species2', '...')"
-	edge [style=filled]
-	"('community',)" -> "('community', 'species1')"
-	edge [style=filled]
-	"('community',)" -> "('community', 'species2')"
+	"('GI<br/>tract', 'Duodenum', 'Mucosa')" -> "('GI<br/>tract', 'Duodenum', 'Mucosa', 'diffusivity')"
 	edge [style=invis]
-	"('community',)" -> "('community', 'ABM')"
+	"('GI<br/>tract', 'Duodenum', 'Mucosa')" -> "('GI<br/>tract', 'Duodenum', 'Mucosa', 'multiscale<br/>diffusion')"
+	edge [style=filled]
+	"('GI<br/>tract', 'Duodenum', 'Epithelium')" -> "('GI<br/>tract', 'Duodenum', 'Epithelium', 'crypts')"
+	edge [style=filled]
+	"('GI<br/>tract', 'Duodenum', 'Microbiota', 'bacterial<br/>species')" -> "('GI<br/>tract', 'Duodenum', 'Microbiota', 'bacterial<br/>species', 'mucinase')"
+	edge [style=filled]
+	"('GI<br/>tract', 'Duodenum', 'Microbiota', 'bacterial<br/>species')" -> "('GI<br/>tract', 'Duodenum', 'Microbiota', 'bacterial<br/>species', 'flagella')"
+	edge [style=filled]
+	"('GI<br/>tract', 'Duodenum', 'Microbiota')" -> "('GI<br/>tract', 'Duodenum', 'Microbiota', 'bacterial<br/>species')"
+	edge [style=filled]
+	"('GI<br/>tract', 'Duodenum')" -> "('GI<br/>tract', 'Duodenum', 'Lumen')"
+	edge [style=filled]
+	"('GI<br/>tract', 'Duodenum')" -> "('GI<br/>tract', 'Duodenum', 'Mucosa')"
+	edge [style=filled]
+	"('GI<br/>tract', 'Duodenum')" -> "('GI<br/>tract', 'Duodenum', 'Epithelium')"
+	edge [style=filled]
+	"('GI<br/>tract', 'Duodenum')" -> "('GI<br/>tract', 'Duodenum', 'Microbiota')"
+	edge [style=invis]
+	"('GI<br/>tract', 'Duodenum')" -> "('GI<br/>tract', 'Duodenum', 'degradation<br/>(Poisson)')"
+	edge [style=invis]
+	"('GI<br/>tract', 'Duodenum')" -> "('GI<br/>tract', 'Duodenum', 'spatial<br/>migration<br/>model<br/>(PDE)')"
+	edge [style=filled]
+	"('GI<br/>tract',)" -> "('GI<br/>tract', 'Duodenum')"
+	edge [style=filled]
+	"('GI<br/>tract',)" -> "('GI<br/>tract', 'Jejunum')"
+	edge [style=filled]
+	"('GI<br/>tract',)" -> "('GI<br/>tract', 'Ileum')"
+	edge [style=filled]
+	"('GI<br/>tract',)" -> "('GI<br/>tract', 'Colon')"
+	edge [style=invis]
+	"('GI<br/>tract',)" -> "('GI<br/>tract', 'Peristalsis<br/>(compartmental)')"
 	edge [arrowhead=dot arrowsize=0.5 penwidth=1 style=dashed]
-	"('community', 'species1')" [label=<species1> fontsize="12pt" margin=0.05 penwidth=2 shape=circle]
-	"('community', 'species2')" [label=<species2> fontsize="12pt" margin=0.05 penwidth=2 shape=circle]
-	subgraph "('community', 'ABM')" {
-		"('community', 'species1')" -> "('community', 'ABM')"
-		"('community', 'species2')" -> "('community', 'ABM')"
+	"('GI<br/>tract', 'Duodenum', 'Mucosa', 'diffusivity')" [label=<diffusivity> fontsize="12pt" margin=0.05 penwidth=2 shape=circle]
+	"('GI<br/>tract', 'Duodenum', 'Mucosa', 'mucus')" [label=<mucus> fontsize="12pt" margin=0.05 penwidth=2 shape=circle]
+	"('GI<br/>tract', 'Duodenum', 'Mucosa', 'mucin')" [label=<mucin> fontsize="12pt" margin=0.05 penwidth=2 shape=circle]
+	subgraph "('GI<br/>tract', 'Duodenum', 'Mucosa', 'multiscale<br/>diffusion')" {
+		"('GI<br/>tract', 'Duodenum', 'Mucosa', 'diffusivity')" -> "('GI<br/>tract', 'Duodenum', 'Mucosa', 'multiscale<br/>diffusion')"
+		"('GI<br/>tract', 'Duodenum', 'Mucosa', 'mucus')" -> "('GI<br/>tract', 'Duodenum', 'Mucosa', 'multiscale<br/>diffusion')"
+		"('GI<br/>tract', 'Duodenum', 'Mucosa', 'mucin')" -> "('GI<br/>tract', 'Duodenum', 'Mucosa', 'multiscale<br/>diffusion')"
+	}
+	"('GI<br/>tract', 'Duodenum', 'Mucosa', 'mucin')" [label=<mucin> fontsize="12pt" margin=0.05 penwidth=2 shape=circle]
+	"('GI<br/>tract', 'Duodenum', 'Mucosa', 'mucus')" [label=<mucus> fontsize="12pt" margin=0.05 penwidth=2 shape=circle]
+	"('GI<br/>tract', 'Duodenum', 'Microbiota', 'bacterial<br/>species', 'mucinase')" [label=<mucinase> fontsize="12pt" margin=0.05 penwidth=2 shape=circle]
+	subgraph "('GI<br/>tract', 'Duodenum', 'degradation<br/>(Poisson)')" {
+		"('GI<br/>tract', 'Duodenum', 'Mucosa', 'mucin')" -> "('GI<br/>tract', 'Duodenum', 'degradation<br/>(Poisson)')"
+		"('GI<br/>tract', 'Duodenum', 'Mucosa', 'mucus')" -> "('GI<br/>tract', 'Duodenum', 'degradation<br/>(Poisson)')"
+		"('GI<br/>tract', 'Duodenum', 'Microbiota', 'bacterial<br/>species', 'mucinase')" -> "('GI<br/>tract', 'Duodenum', 'degradation<br/>(Poisson)')"
+	}
+	"('GI<br/>tract', 'Duodenum', 'Microbiota', 'bacterial<br/>species', 'flagella')" [label=<flagella> fontsize="12pt" margin=0.05 penwidth=2 shape=circle]
+	"('GI<br/>tract', 'Duodenum', 'Lumen', 'nutrients')" [label=<nutrients> fontsize="12pt" margin=0.05 penwidth=2 shape=circle]
+	"('GI<br/>tract', 'Duodenum', 'Epithelium', 'crypts')" [label=<crypts> fontsize="12pt" margin=0.05 penwidth=2 shape=circle]
+	"('GI<br/>tract', 'Duodenum', 'Mucosa', 'diffusivity')" [label=<diffusivity> fontsize="12pt" margin=0.05 penwidth=2 shape=circle]
+	subgraph "('GI<br/>tract', 'Duodenum', 'spatial<br/>migration<br/>model<br/>(PDE)')" {
+		"('GI<br/>tract', 'Duodenum', 'Microbiota', 'bacterial<br/>species', 'flagella')" -> "('GI<br/>tract', 'Duodenum', 'spatial<br/>migration<br/>model<br/>(PDE)')"
+		"('GI<br/>tract', 'Duodenum', 'Lumen', 'nutrients')" -> "('GI<br/>tract', 'Duodenum', 'spatial<br/>migration<br/>model<br/>(PDE)')"
+		"('GI<br/>tract', 'Duodenum', 'Epithelium', 'crypts')" -> "('GI<br/>tract', 'Duodenum', 'spatial<br/>migration<br/>model<br/>(PDE)')"
+		"('GI<br/>tract', 'Duodenum', 'Mucosa', 'diffusivity')" -> "('GI<br/>tract', 'Duodenum', 'spatial<br/>migration<br/>model<br/>(PDE)')"
+	}
+	"('GI<br/>tract', 'Duodenum')" [label=<Duodenum> fontsize="12pt" margin=0.05 penwidth=2 shape=circle]
+	"('GI<br/>tract', 'Jejunum')" [label=<Jejunum> fontsize="12pt" margin=0.05 penwidth=2 shape=circle]
+	"('GI<br/>tract', 'Ileum')" [label=<Ileum> fontsize="12pt" margin=0.05 penwidth=2 shape=circle]
+	"('GI<br/>tract', 'Colon')" [label=<Colon> fontsize="12pt" margin=0.05 penwidth=2 shape=circle]
+	subgraph "('GI<br/>tract', 'Peristalsis<br/>(compartmental)')" {
+		"('GI<br/>tract', 'Duodenum')" -> "('GI<br/>tract', 'Peristalsis<br/>(compartmental)')"
+		"('GI<br/>tract', 'Jejunum')" -> "('GI<br/>tract', 'Peristalsis<br/>(compartmental)')"
+		"('GI<br/>tract', 'Ileum')" -> "('GI<br/>tract', 'Peristalsis<br/>(compartmental)')"
+		"('GI<br/>tract', 'Colon')" -> "('GI<br/>tract', 'Peristalsis<br/>(compartmental)')"
 	}
 	edge [arrowhead=dot arrowsize=0.5 penwidth=1 style=dashed]
 	edge [arrowhead=none arrowtail=dot dir=both penwidth=1 style=dashed]
-	subgraph "[('environment',), ('community',)]" {
+	subgraph "[('GI<br/>tract', 'Duodenum', 'Epithelium'), ('GI<br/>tract', 'Duodenum', 'Microbiota'), ('GI<br/>tract', 'Duodenum', 'Mucosa')]" {
 		rank=same
-		"('community',)"
+		"('GI<br/>tract', 'Duodenum', 'Epithelium')"
+		"('GI<br/>tract', 'Duodenum', 'Microbiota')"
+		"('GI<br/>tract', 'Duodenum', 'Epithelium')" -> "('GI<br/>tract', 'Duodenum', 'Microbiota')" [ordering=out style=invis]
+		"('GI<br/>tract', 'Duodenum', 'Mucosa')"
+		"('GI<br/>tract', 'Duodenum', 'Microbiota')" -> "('GI<br/>tract', 'Duodenum', 'Mucosa')" [ordering=out style=invis]
 	}
 }
