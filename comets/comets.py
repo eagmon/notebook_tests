@@ -5,12 +5,6 @@ import numpy as np
 from scipy.ndimage import convolve
 import matplotlib.pyplot as plt
 
-# import imageio
-import imageio.v2 as imageio
-import base64
-import io
-from IPython.display import HTML
-
 # COBRApy for FBA
 import cobra
 from cobra.io import load_model
@@ -35,47 +29,86 @@ glucose_import_reaction_id = 'EX_glc__D_e'  # Example reaction ID for glucose im
 model_species_2.reactions.get_by_id(glucose_import_reaction_id).lower_bound = 0
 
 
+def dfba_timestep(
+        model,
+        current_state,
+        kinetic_params,
+        biomass_reaction,
+        substrate_update_reactions,
+        dt,
+        biomass_identifier='biomass'
+):
+    """
+    Performs a single timestep of dynamic FBA.
+
+    Parameters:
+    - model: The metabolic model for the simulation.
+    - current_state: Current state of the system (concentrations, biomass, etc.).
+    - kinetic_params: Kinetic parameters (Km and Vmax) for each substrate.
+    - biomass_reaction: The identifier for the biomass reaction in the model.
+    - substrate_update_reactions: A dictionary mapping substrates to their update reactions.
+    - dt: The duration of the timestep.
+    - biomass_identifier: The identifier for biomass in the current state.
+
+    Returns:
+    - Updated state after the timestep.
+    """
+    updated_state = current_state.copy()
+
+    for substrate, reaction_id in substrate_update_reactions.items():
+        Km, Vmax = kinetic_params[substrate]
+        substrate_concentration = updated_state[substrate]
+        uptake_rate = Vmax * substrate_concentration / (Km + substrate_concentration)
+        model.reactions.get_by_id(reaction_id).lower_bound = -uptake_rate
+
+    solution = model.optimize()
+    if solution.status == 'optimal':
+        biomass_growth_rate = solution.fluxes[biomass_reaction]
+        updated_state[biomass_identifier] += biomass_growth_rate * updated_state[biomass_identifier] * dt
+
+        for substrate, reaction_id in substrate_update_reactions.items():
+            flux = solution.fluxes[reaction_id]
+            updated_state[substrate] = max(updated_state[substrate] + flux * updated_state[biomass_identifier] * dt, 0)
+    else:
+        # Handle non-optimal solutions if necessary
+        pass
+
+    return updated_state
+
+
 def perform_dfba(
         model,
         initial_conditions,
-        kinetic_params,  # (Km, Vmax)
+        kinetic_params,
         time_points,
         biomass_reaction,
         substrate_update_reactions,
         dt,
-        biomass_identifier='biomass',
+        biomass_identifier='biomass'
 ):
     """
-    Perform dynamic FBA (dFBA) simulation.
+    Perform dynamic FBA (dFBA) simulation over multiple timesteps.
+
+    This function tracks the history of the simulation state at each timestep.
     """
     results = {key: [value] for key, value in initial_conditions.items()}
-
-    # Correctly initialize results dictionary for time points
-    for key in results:
-        for _ in range(1, len(time_points)):
-            results[key].append(0)  # Pre-fill with 0 to match the length of time_points
+    current_state = initial_conditions
 
     for t_i in range(1, len(time_points)):
-        for substrate, reaction_id in substrate_update_reactions.items():
-            Km, Vmax = kinetic_params[substrate]
-            substrate_concentration = results[substrate][t_i - 1]
-            uptake_rate = Vmax * substrate_concentration / (Km + substrate_concentration)
-            model.reactions.get_by_id(reaction_id).lower_bound = -uptake_rate
+        current_state = dfba_timestep(model,
+                                      current_state,
+                                      kinetic_params,
+                                      biomass_reaction,
+                                      substrate_update_reactions,
+                                      dt,
+                                      biomass_identifier)
 
-        solution = model.optimize()
-        if solution.status == 'optimal':
-            biomass_growth_rate = solution.fluxes[biomass_reaction]
-
-            results[biomass_identifier][t_i] = results[biomass_identifier][t_i - 1] + biomass_growth_rate * \
-                                               results[biomass_identifier][t_i - 1] * dt
-
-            for substrate, reaction_id in substrate_update_reactions.items():
-                flux = solution.fluxes[reaction_id]
-                results[substrate][t_i] = max(
-                    results[substrate][t_i - 1] + flux * results[biomass_identifier][t_i - 1] * dt, 0)
-        else:
-            for key in results.keys():
-                results[key][t_i] = results[key][t_i - 1]
+        # Store the current state in results
+        for key in current_state:
+            if key in results:
+                results[key].append(current_state[key])
+            else:
+                results[key] = [current_state[key]]
 
     return results
 
@@ -161,39 +194,36 @@ def perform_multi_species_dfba(initial_conditions, species_list, dt, n_timepoint
 
     # Perform dFBA for each time step
     for t_i in range(n_timepoints):
-        dfba_results = []
+        species_states = []
 
         # Perform dFBA for each species
         for species in species_list:
-            dfba_result = perform_dfba(
+            updated_state = dfba_timestep(
                 species['model'],
                 state,
                 species['kinetic_params'],
-                [dt],  # This now indicates a single step of duration dt
                 species['biomass_reaction'],
                 species['substrate_update_reactions'],
                 dt,
                 species['biomass_identifier'],
             )
-            dfba_results.append(dfba_result)
 
-            # Update biomass in simulation results
-            sim_results[species['biomass_identifier']].append(dfba_result[species['biomass_identifier']][-1])
+            # Prepare the state for update_shared_environment by adjusting to show changes
+            species_result = {k: [state[k], updated_state[k]] for k in updated_state}
+            species_states.append(species_result)
 
-
-
-            if species['biomass_identifier'] == 'species_2' and state['species_2'] > 0:
-                print(f"Species2 BEFORE DFBA: {state['species_2']}")
-                print(f"Species2 AFTER DFBA: {dfba_result['species_2']}")
-
-
+            # # Temporarily update the state for the next species
+            # state.update(updated_state)
 
         # Update the shared environment
-        update_shared_environment(state, *dfba_results)
+        update_shared_environment(state, *species_states)
 
-        # Update substrate concentrations in simulation results
-        for substrate in [k for k in state.keys() if k not in ['biomass_species_1', 'biomass_species_2']]:
-            sim_results[substrate].append(state[substrate])
+        # Collect results for this timestep
+        for key in state:
+            if key in sim_results:
+                sim_results[key].append(state[key])
+            else:
+                sim_results[key] = [state[key]]
 
     return sim_results
 
@@ -337,20 +367,10 @@ def spatial_dfba_timestep(initial_states, species_info, dt):
                 species_info,
                 dt)
 
-            # if site_initial_conditions['species_2'] > 0:
-            #     print(f"Species2 BEFORE MULTISPECIES DFBA: {site_initial_conditions['species_2']}")
-            #     print(f"Species2 AFTER MULTISPECIES DFBA: {sim_results['species_2']}")
-            #     x=0
-
             # Update fields with the final state from dFBA results
             for key in updated_states:
                 if key in sim_results:
                     updated_states[key][y, x] = sim_results[key][-1]
-
-                    if key == 'species_2' and sim_results['species_2'][-1] > 0:
-                        print(f"Species2 BEFORE MULTISPECIES DFBA: {initial_states['species_2']}")
-                        print(f"Species2 AFTER MULTISPECIES DFBA: {updated_states['species_2']}")
-                        x=0
 
     return updated_states
 
@@ -402,10 +422,6 @@ def simulate_comets_diffuse(initial_states, species_info, diffusion_coeffs, adve
 
         # Perform dFBA with the updated states from advection and diffusion
         updated_states = spatial_dfba_timestep(updated_states_dict, species_info, dt)
-
-
-        print(f"Species2 AFTER SPATIAL DFBA: {updated_states['species_2']}")
-
 
         # Update current_states with the results from dFBA for the next iteration
         current_states.update(updated_states)
@@ -788,8 +804,8 @@ def run_comets2():
 
 def run_comets3():
     # Define the dimensions of the simulation grid
-    width = 4
-    height = 4
+    width = 6
+    height = 6
 
     # Initialize the acetate concentration field with zeros
     # acetate_field = np.zeros((height, width))
@@ -817,10 +833,119 @@ def run_comets3():
     # Specify diffusion coefficients for glucose, acetate, and biomass_species_1
     # These values control the rate of spread for each component in the simulation
     diffusion_coeffs = {
-        'glucose': 0.01,  # Diffusion coefficient for glucose
-        'acetate': 0.01,  # Diffusion coefficient for acetate
+        'glucose': 0.1,  # Diffusion coefficient for glucose
+        'acetate': 0.1,  # Diffusion coefficient for acetate
         'species_1': 0.0,  # Diffusion for biomass_species_1
         'species_2': 0.0,  # Diffusion for biomass_species_2
+    }
+
+    # Define advection (flow) fields for glucose, acetate, and biomass_species_1
+    # Advection fields specify the direction and speed of flow for each component
+    advection_fields = {
+        'glucose': (0, 0),  # No advection for glucose
+        'acetate': (0, 0),  # No advection for acetate
+        'species_1': (0, 0),  # No advection for biomass_species_1
+        'species_2': (0, 0),  # No advection for biomass_species_2
+    }
+
+    # (Km, Vmax) for species 1
+    kinetic_params_species_1 = {
+        'glucose': (0.5, 2),
+        'acetate': (0.5, 2)
+    }
+    kinetic_params_species_2 = {
+        'glucose': (0.5, 0.01),
+        'acetate': (0.5, 2)
+    }
+
+    # Which reactions are used by species 1
+    substrate_update_reactions = {
+        'glucose': 'EX_glc__D_e',
+        'acetate': 'EX_ac_e'
+    }
+
+    # Configure the simulation for species 1, including metabolic model, kinetic parameters, and biomass reaction
+    species_info = [
+        {
+            'model': model_species_1,  # Metabolic model for species 1
+            'kinetic_params': kinetic_params_species_1,  # Kinetic parameters for species 1
+            'substrate_update_reactions': substrate_update_reactions,  # Substrate uptake reactions for species 1
+            'biomass_reaction': 'Biomass_Ecoli_core',  # ID of the biomass reaction, adjust as needed
+            'biomass_identifier': 'species_1',  # Key identifying biomass_species_1 in the simulation
+        },
+        {
+            'model': model_species_2,  # model_species_2,  # Metabolic model for species 2
+            'kinetic_params': kinetic_params_species_2,
+            'substrate_update_reactions': substrate_update_reactions,
+            'biomass_reaction': 'Biomass_Ecoli_core',
+            'biomass_identifier': 'species_2',
+        },
+    ]
+
+    # Set the total time and timestep size for the simulation
+    total_time = 15.0  # Total simulation time
+    dt = 1.0          # Timestep size
+
+    # Run the simulation with specified parameters, capturing the results
+    comets_results3 = simulate_comets_diffuse(
+        initial_states,
+        species_info,
+        diffusion_coeffs,
+        advection_fields,
+        total_time,
+        dt
+    )
+
+    # plot results
+    n_times = len(comets_results3['time'])
+    # time_indices = [0, int(n_times / 4), int(n_times / 2), n_times - 1]
+    time_indices = np.round(np.linspace(0, n_times - 1, 5, endpoint=True)).astype(int).tolist()
+    #[x for x in range(n_times)]
+    plot_species_distributions(
+        comets_results3,
+        time_indices=time_indices,
+        title='1 species with diffusion',
+        filename='out/comets3.png')
+
+
+def run_comets4():
+    ## Example #3 Two species: glucose and acetate eating
+    # %%
+    # Define the dimensions of the simulation grid
+    width = 20
+    height = 20
+
+    # Initialize the acetate concentration field with zeros
+    acetate_field = np.zeros((height, width))
+
+    # Create a linear glucose concentration gradient from 1 (top) to 0 (bottom) vertically
+    max_glc = 50
+    glc_field = np.random.rand(height, width) * max_glc
+
+    # Initialize the biomass concentration field, setting a small biomass concentration in a specific row
+    species1_field = np.zeros((height, width))
+    species1_field[int(2 * width / 5):int(3 * width / 5),
+    int(2 * width / 5):int(3 * width / 5)] = 0.1  # Center concentration
+
+    species2_field = np.zeros((height, width))
+    species2_field[int(3 * width / 5):int(4 * width / 5),
+    int(3 * width / 5):int(4 * width / 5)] = 0.1  # Center concentration
+
+    # Initial states of the simulation, mapping each substance to its corresponding field
+    initial_states = {
+        'glucose': glc_field,
+        'acetate': acetate_field,
+        'species_1': species1_field,
+        'species_2': species2_field,
+    }
+
+    # Specify diffusion coefficients for glucose, acetate, and biomass_species_1
+    # These values control the rate of spread for each component in the simulation
+    diffusion_coeffs = {
+        'glucose': 0.01,  # Diffusion coefficient for glucose
+        'acetate': 0.01,  # Diffusion coefficient for acetate
+        'species_1': 0.01,  # Diffusion for biomass_species_1
+        'species_2': 0.01,  # Diffusion for biomass_species_2
     }
 
     # Define advection (flow) fields for glucose, acetate, and biomass_species_1
@@ -867,11 +992,11 @@ def run_comets3():
     ]
 
     # Set the total time and timestep size for the simulation
-    total_time = 1.0  # Total simulation time
-    dt = 0.1          # Timestep size
+    total_time = 40.0  # Total simulation time
+    dt = 0.1  # Timestep size
 
     # Run the simulation with specified parameters, capturing the results
-    comets_results3 = simulate_comets_diffuse(
+    comets_results4 = simulate_comets_diffuse(
         initial_states,
         species_info,
         diffusion_coeffs,
@@ -881,13 +1006,15 @@ def run_comets3():
     )
 
     # plot results
-    n_times = len(comets_results3['time'])
-    time_indices = [0, int(n_times / 4), int(n_times / 2), n_times - 1]
+    n_times = len(comets_results4['time'])
+    # time_indices = [0, int(n_times / 4), int(n_times / 2), n_times - 1]
+    time_indices = np.round(np.linspace(0, n_times - 1, 5, endpoint=True)).astype(int).tolist()
+    # [x for x in range(n_times)]
     plot_species_distributions(
-        comets_results3,
+        comets_results4,
         time_indices=time_indices,
         title='1 species with diffusion',
-        filename='out/comets3.png')
+        filename='out/comets4.png')
 
 
 
@@ -897,4 +1024,5 @@ if __name__ == '__main__':
     # run_diffusion_advection()
     # run_comets1()
     # run_comets2()
-    run_comets3()
+    # run_comets3()
+    run_comets4()
